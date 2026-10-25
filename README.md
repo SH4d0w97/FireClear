@@ -33,23 +33,24 @@ Modern streaming devices are increasingly overwhelmed by sponsored autoplay vide
 ## Interface & Navigation
 
 ```
- Sunday, 25 October               [ 9:41 AM ]  [ Wi-Fi ]  [ Wallpaper ]  [ Settings ]
+ 20:45                           ┌───────────────────────────────┐                             📶
+ Monday, 26 October              │  [Favourites]  All Apps  Settings │
+                                 └───────────────────────────────┘
 
-                     (Cinematic wallpaper space)
+                                (Atmospheric wallpaper space)
 
- ┌────────────────────────────────────────────────────────────────────────┐
- │   [ YouTube ]    [[ Prime Video ]]     [ Plex ]       [ Netflix ]      │  ← Frosted 4-App Dock
- └────────────────────────────────────────────────────────────────────────┘
-                      Prime Video (lifts, scales, 3D shadow & halo)
- ──────────────────────────────────────────────────────────────────────────  ← Screen fold
-       [   Kodi   ]  [ Downloader ]  [  Photos  ]  [  Browser  ]  [  Files  ]  ← Bottom Peek (~34dp)
+ ┌──────────────────────────────────────────────────────────────────────────────────────────────┐
+ │       [ YouTube ]           [[ Prime Video ]]            [ Spotify ]           [ Netflix ]   │  ← 4-App Dock
+ └──────────────────────────────────────────────────────────────────────────────────────────────┘
+                                  Prime Video (ambient bloom & 1.06x focus)
 ```
 
-- **Top-Right Status Cluster:** Discreet time capsule, real-time Wi-Fi status, wallpaper customizer, and one-click access to system settings.
-- **Floating Favorites Dock:** Holds your 4 most essential apps on a frosted glass shelf capsule with specular edge highlights.
-- **Below-the-Fold Peek:** When on the dock, the top ~34dp of the installed apps row peeks through from the bottom edge, indicating additional content without visual clutter.
-- **Smooth Expansion:** Pressing **Down** smoothly glides the viewport into the centered 5-column grid of all installed apps.
-- **Fluid Focus Physics:** Focused tiles lift forward, scale smoothly, cast depth shadows, and present high-contrast focus rings with gentle label fade-ins.
+- **Independently Centered Glass Pill:** Smoky charcoal translucent capsule (`#20252D` at ~67% opacity with a subtle white border) perfectly centered horizontally across the display. Houses three tabs: **Favourites**, **All Apps**, and **Settings**.
+- **Cinematic Negative Space:** The Home screen (*Favourites*) contains exclusively your 4 pinned apps in the dock. No recommendations, banners, or section headings—the wallpaper breathes naturally.
+- **Adaptive Ambient Glow:** A soft, low-opacity radial gradient near the bottom dock smoothly blooms with the focused app's signature brand color (e.g., ruby for YouTube, emerald for Spotify, sapphire for Prime Video).
+- **All Applications View:** A dedicated 5-column grid for all installed applications with custom brand-tinted cards, top specular sheens, and inner glass rims.
+- **Quick Settings Hub:** Streamlined 2×3 control center tiles (*Wi-Fi*, *Bluetooth*, *Wallpaper*, *Sound*, *Display*, *Network*) plus a full-width *All Settings* gateway with high-contrast active states.
+- **Restrained Focus Physics:** Focused tiles scale slightly (1.06×), project a clean soft-white outline, and cast subtle depth shadows with a smooth 240ms transition.
 
 ---
 
@@ -229,13 +230,14 @@ For the cleanest and most stable experience, proceed in this order:
 
 | Key | Context | Action |
 |---|---|---|
-| **Select / OK** | Any app tile | Launches the selected application |
-| **Menu (☰) or Long-press OK** | Grid app tile | Opens slot assignment dialog (*Pin to Dock Slot 1–4*, *Hide*, *App Info*) |
-| **Menu (☰) or Long-press OK** | Dock tile | Opens dock reordering (*Move Left*, *Move Right*, *Remove*, *App Info*) |
-| **Up** | Dock row | Moves focus to the top status cluster (*Time*, *Wi-Fi*, *Wallpaper*, *Settings*) |
-| **Down** | Dock row | Smoothly glides down into the 5-column installed apps grid |
-| **Up** | Top grid row | Glides smoothly back up to the Dock and top viewport fold |
-| **Home** | Anywhere | Returns to the first tile of the favorites dock |
+| **Select / OK** | App tile | Launches the selected application |
+| **Select / OK** | Navigation tab | Switches active view (*Favourites*, *All Apps*, *Settings*) |
+| **Menu (☰) or Long-press OK** | Pinned dock tile | Reorder left/right, remove from dock, or open app info |
+| **Menu (☰) or Long-press OK** | All Apps tile | Pin to Favourites (slot 1–4), hide from launcher, or open app info |
+| **Up** | Favourites dock / Grid / Settings | Moves focus up to the centered Navigation Pill |
+| **Down** | Navigation Pill | Enters the active view's content |
+| **Left / Right** | Navigation Pill | Switches between *Favourites*, *All Apps*, and *Settings* |
+| **Home** | Anywhere | Immediately returns to the Favourites Home screen |
 
 ---
 
