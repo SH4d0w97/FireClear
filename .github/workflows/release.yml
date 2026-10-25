@@ -1,57 +1,285 @@
 name: release
-# Push a tag like v2.3 to publish a GitHub Release with the APK + SHA-256.
-# Optional stable signing: add repo secrets FIRECLEAR_KEYSTORE_B64, FIRECLEAR_KS_PASS,
-# FIRECLEAR_KEY_ALIAS, FIRECLEAR_KEY_PASS. Without them the APK is debug-signed.
+
 on:
-  push:
-    tags:
-      - 'v*'
-      - 'Pre-Release'
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: "Semantic version bump type"
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
 permissions:
   contents: write
+
+concurrency:
+  group: release-workflow
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: bash scripts/audit.sh
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Calculate next version
+        id: versions
+        env:
+          BUMP_TYPE: ${{ github.event.inputs.bump_type }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          import re
+
+          bump_type = os.environ["BUMP_TYPE"]
+          gradle_path = Path("app/build.gradle.kts")
+          text = gradle_path.read_text(encoding="utf-8")
+
+          version_name_match = re.search(r'(?m)^\s*versionName\s*=\s*"([^"]+)"\s*$', text)
+          version_code_match = re.search(r'(?m)^\s*versionCode\s*=\s*(\d+)\s*$', text)
+
+          if not version_name_match:
+              raise SystemExit("Could not find versionName in app/build.gradle.kts")
+          if not version_code_match:
+              raise SystemExit("Could not find versionCode in app/build.gradle.kts")
+
+          raw_version_name = version_name_match.group(1).strip()
+          raw_parts = raw_version_name.split(".")
+          if not raw_parts or len(raw_parts) > 3:
+              raise SystemExit(f"Unsupported versionName format: {raw_version_name}")
+
+          try:
+              parts = [int(p) for p in raw_parts]
+          except ValueError as exc:
+              raise SystemExit(f"versionName must be numeric dot-separated, got: {raw_version_name}") from exc
+
+          while len(parts) < 3:
+              parts.append(0)
+
+          major, minor, patch = parts
+
+          if bump_type == "patch":
+              patch += 1
+          elif bump_type == "minor":
+              minor += 1
+              patch = 0
+          elif bump_type == "major":
+              major += 1
+              minor = 0
+              patch = 0
+          else:
+              raise SystemExit(f"Unsupported bump_type: {bump_type}")
+
+          current_version = ".".join(str(p) for p in parts)
+          new_version = f"{major}.{minor}.{patch}"
+          current_code = int(version_code_match.group(1))
+          new_code = current_code + 1
+          new_tag = f"v{new_version}"
+
+          github_output = Path(os.environ["GITHUB_OUTPUT"])
+          with github_output.open("a", encoding="utf-8") as fh:
+              fh.write(f"current_version={current_version}\n")
+              fh.write(f"new_version={new_version}\n")
+              fh.write(f"current_code={current_code}\n")
+              fh.write(f"new_code={new_code}\n")
+              fh.write(f"new_tag={new_tag}\n")
+          PY
+
+      - name: Preflight: fail if release/tag already exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEW_TAG: ${{ steps.versions.outputs.new_tag }}
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+          if git rev-parse --verify --quiet "refs/tags/${NEW_TAG}" >/dev/null; then
+            echo "Tag ${NEW_TAG} already exists. Aborting before making changes."
+            exit 1
+          fi
+
+          if gh release view "${NEW_TAG}" >/dev/null 2>&1; then
+            echo "Release ${NEW_TAG} already exists. Aborting before making changes."
+            exit 1
+          fi
+
+      - name: Update version and changelog
+        env:
+          CURRENT_VERSION: ${{ steps.versions.outputs.current_version }}
+          NEW_VERSION: ${{ steps.versions.outputs.new_version }}
+          CURRENT_CODE: ${{ steps.versions.outputs.current_code }}
+          NEW_CODE: ${{ steps.versions.outputs.new_code }}
+          BUMP_TYPE: ${{ github.event.inputs.bump_type }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from datetime import date
+          import os
+          import re
+
+          gradle_file = Path("app/build.gradle.kts")
+          changelog_file = Path("CHANGELOG.md")
+
+          current_version = os.environ["CURRENT_VERSION"]
+          new_version = os.environ["NEW_VERSION"]
+          current_code = os.environ["CURRENT_CODE"]
+          new_code = os.environ["NEW_CODE"]
+          bump_type = os.environ["BUMP_TYPE"]
+
+          gradle_text = gradle_file.read_text(encoding="utf-8")
+          gradle_text, version_code_changes = re.subn(
+              r'(?m)^(\s*versionCode\s*=\s*)\d+(\s*)$',
+              rf'\g<1>{new_code}\g<2>',
+              gradle_text,
+              count=1,
+          )
+          gradle_text, version_name_changes = re.subn(
+              r'(?m)^(\s*versionName\s*=\s*)"[^"]+"(\s*)$',
+              rf'\g<1>"{new_version}"\g<2>',
+              gradle_text,
+              count=1,
+          )
+
+          if version_code_changes != 1 or version_name_changes != 1:
+              raise SystemExit("Failed to update versionCode/versionName in app/build.gradle.kts")
+
+          gradle_file.write_text(gradle_text, encoding="utf-8")
+
+          changelog_text = changelog_file.read_text(encoding="utf-8")
+          today = date.today().isoformat()
+          entry = (
+              f"## {new_version} - {today}\n"
+              f"- Automated {bump_type} release bump from {current_version} (versionCode {current_code}) to "
+              f"{new_version} (versionCode {new_code}) via manual workflow dispatch.\n\n"
+          )
+
+          header_match = re.match(r'^#\s+Changelog\s*\n\n?', changelog_text)
+          if header_match:
+              insert_at = header_match.end()
+              updated_changelog = changelog_text[:insert_at] + entry + changelog_text[insert_at:]
+          else:
+              updated_changelog = f"# Changelog\n\n{entry}{changelog_text}"
+
+          changelog_file.write_text(updated_changelog, encoding="utf-8")
+          PY
+
+      - name: Commit and push release prep
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          NEW_VERSION: ${{ steps.versions.outputs.new_version }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/build.gradle.kts CHANGELOG.md
+          if git diff --cached --quiet; then
+            echo "No changes staged for release prep."
+            exit 1
+          fi
+          git commit -m "chore(release): v${NEW_VERSION}"
+          git push origin "HEAD:${DEFAULT_BRANCH}"
+
+      - name: Create and push release tag
+        env:
+          NEW_TAG: ${{ steps.versions.outputs.new_tag }}
+        run: |
+          set -euo pipefail
+          git tag -a "${NEW_TAG}" -m "Release ${NEW_TAG}"
+          git push origin "${NEW_TAG}"
+
+      - name: Static security audit
+        run: |
+          set -euo pipefail
+          bash scripts/audit.sh
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
-      - name: Decode keystore (only if secrets exist)
+
+      - name: Decode keystore (only if present)
         env:
           KS_B64: ${{ secrets.FIRECLEAR_KEYSTORE_B64 }}
         run: |
-          if [ -n "$KS_B64" ]; then
-            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
-            echo "FIRECLEAR_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          set -euo pipefail
+          if [ -n "${KS_B64:-}" ]; then
+            echo "${KS_B64}" | base64 -d > "${RUNNER_TEMP}/release.jks"
+            echo "FIRECLEAR_KEYSTORE=${RUNNER_TEMP}/release.jks" >> "${GITHUB_ENV}"
           fi
-      - name: Build
+
+      - name: Build APK
+        id: build
         env:
           FIRECLEAR_KS_PASS: ${{ secrets.FIRECLEAR_KS_PASS }}
           FIRECLEAR_KEY_ALIAS: ${{ secrets.FIRECLEAR_KEY_ALIAS }}
           FIRECLEAR_KEY_PASS: ${{ secrets.FIRECLEAR_KEY_PASS }}
         run: |
-          if [ -n "${FIRECLEAR_KEYSTORE:-}" ]; then
+          set -euo pipefail
+          if [ -n "${FIRECLEAR_KEYSTORE:-}" ] \
+            && [ -n "${FIRECLEAR_KS_PASS:-}" ] \
+            && [ -n "${FIRECLEAR_KEY_ALIAS:-}" ] \
+            && [ -n "${FIRECLEAR_KEY_PASS:-}" ]; then
             gradle --no-daemon assembleRelease
-            cp app/build/outputs/apk/release/app-release.apk "FireClear-${GITHUB_REF_NAME}.apk"
+            echo "apk_path=app/build/outputs/apk/release/app-release.apk" >> "${GITHUB_OUTPUT}"
+            echo "signed=true" >> "${GITHUB_OUTPUT}"
           else
             gradle --no-daemon assembleDebug
-            cp app/build/outputs/apk/debug/app-debug.apk "FireClear-${GITHUB_REF_NAME}.apk"
+            echo "apk_path=app/build/outputs/apk/debug/app-debug.apk" >> "${GITHUB_OUTPUT}"
+            echo "signed=false" >> "${GITHUB_OUTPUT}"
           fi
+
       - name: Verify built APK
-        run: bash scripts/verify-apk.sh "FireClear-${GITHUB_REF_NAME}.apk"
-      - name: Publish release
+        run: |
+          set -euo pipefail
+          bash scripts/verify-apk.sh "${{ steps.build.outputs.apk_path }}"
+
+      - name: Prepare release assets
+        env:
+          NEW_VERSION: ${{ steps.versions.outputs.new_version }}
+          APK_PATH: ${{ steps.build.outputs.apk_path }}
+        run: |
+          set -euo pipefail
+          cp "${APK_PATH}" "FireClear-v${NEW_VERSION}.apk"
+          sha256sum "FireClear-v${NEW_VERSION}.apk" | tee SHA256SUMS.txt
+
+      - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          NEW_TAG: ${{ steps.versions.outputs.new_tag }}
+          NEW_VERSION: ${{ steps.versions.outputs.new_version }}
+          BUMP_TYPE: ${{ github.event.inputs.bump_type }}
+          SIGNED_BUILD: ${{ steps.build.outputs.signed }}
         run: |
-          sha256sum "FireClear-${GITHUB_REF_NAME}.apk" | tee SHA256SUMS.txt
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "FireClear-${GITHUB_REF_NAME}.apk" SHA256SUMS.txt --clobber
+          set -euo pipefail
+          if [ "${SIGNED_BUILD}" = "true" ]; then
+            cat > RELEASE_BODY.txt <<EOF_BODY
+          Release generated from a manual workflow_dispatch run (${BUMP_TYPE} bump).
+          APK is signed with the configured FireClear release keystore.
+          EOF_BODY
           else
-            gh release create "$GITHUB_REF_NAME" "FireClear-${GITHUB_REF_NAME}.apk" SHA256SUMS.txt --generate-notes
+            cat > RELEASE_BODY.txt <<EOF_BODY
+          Release generated from a manual workflow_dispatch run (${BUMP_TYPE} bump).
+          ⚠️ APK is debug-signed for testing because FIRECLEAR release signing secrets are not fully configured.
+          EOF_BODY
           fi
+
+          # Keep this as a normal release so users can install from /releases/latest.
+          gh release create "${NEW_TAG}" \
+            "FireClear-v${NEW_VERSION}.apk" \
+            SHA256SUMS.txt \
+            --title "${NEW_TAG}" \
+            --notes-file RELEASE_BODY.txt \
+            --generate-notes
