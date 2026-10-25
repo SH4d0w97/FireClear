@@ -437,3 +437,5 @@ PRs are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). Device reports (mode
 Licensed under [MIT](LICENSE).
 
 > Not affiliated with Amazon or Apple. "tvOS-style" describes the layout only — no Apple assets are used. Disabling system packages is at your own risk; it is unsupported by Amazon but fully reversible.
+
+
