@@ -1,0 +1,36 @@
+# Packages to switch off. One per line, '#' = comment.
+# Source: 26-package list tested on Fire OS (Tecnobits, Oct 2026). Any package your
+# device doesn't have is simply skipped. Nothing here touches Wi-Fi, HDMI, audio or Netflix/YouTube.
+
+# --- ads / recommendations / tracking ---
+com.amazon.spiderpork
+com.amazon.tv.acr
+com.amazon.hybridadidservice
+com.amazon.media.recommendations
+com.amazon.device.telemetry.emitter
+com.amazon.dp.logger
+com.amazon.perfcollection
+com.amazon.wirelessmetrics.service
+com.amazon.shoptv.client
+com.amazon.sneakpeek
+com.amazon.tv.democontent.provider
+com.amazon.audiohome
+com.amazon.minitv.android.app
+com.amazon.kso.blackbird
+# --- junk services / apps you didn't ask for ---
+com.amazon.whisperplay.contracts
+com.amazon.bueller.photos
+com.amazon.bueller.music
+com.amazon.ods.kindleconnect
+com.amazon.tv.easyupgrade
+com.amazon.tahoe
+com.amazon.storm.lightning.tutorial
+com.amazon.smarthomemapviewapp
+com.amazon.tv.alexanotifications
+com.amazon.gamehub
+com.amazon.tv.matter
+com.amazon.hedwig
+
+# --- OPTIONAL (not verified by me; uncomment if you want them gone) ---
+# com.amazon.ftv.screensaver
+# com.amazon.imdb.tv.android.app

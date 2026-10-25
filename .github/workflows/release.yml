@@ -1,0 +1,51 @@
+name: release
+# Push a tag like v2.1 to publish a GitHub Release with the APK + SHA-256.
+# Optional stable signing: add repo secrets FIRECLEAR_KEYSTORE_B64, FIRECLEAR_KS_PASS,
+# FIRECLEAR_KEY_ALIAS, FIRECLEAR_KEY_PASS. Without them the APK is debug-signed.
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/audit.sh
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Decode keystore (only if secrets exist)
+        env:
+          KS_B64: ${{ secrets.FIRECLEAR_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "FIRECLEAR_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          fi
+      - name: Build
+        env:
+          FIRECLEAR_KS_PASS: ${{ secrets.FIRECLEAR_KS_PASS }}
+          FIRECLEAR_KEY_ALIAS: ${{ secrets.FIRECLEAR_KEY_ALIAS }}
+          FIRECLEAR_KEY_PASS: ${{ secrets.FIRECLEAR_KEY_PASS }}
+        run: |
+          if [ -n "${FIRECLEAR_KEYSTORE:-}" ]; then
+            gradle --no-daemon assembleRelease
+            cp app/build/outputs/apk/release/app-release.apk "FireClear-${GITHUB_REF_NAME}.apk"
+          else
+            gradle --no-daemon assembleDebug
+            cp app/build/outputs/apk/debug/app-debug.apk "FireClear-${GITHUB_REF_NAME}.apk"
+          fi
+      - name: Verify built APK
+        run: bash scripts/verify-apk.sh "FireClear-${GITHUB_REF_NAME}.apk"
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha256sum "FireClear-${GITHUB_REF_NAME}.apk" | tee SHA256SUMS.txt
+          gh release create "$GITHUB_REF_NAME" "FireClear-${GITHUB_REF_NAME}.apk" SHA256SUMS.txt --generate-notes

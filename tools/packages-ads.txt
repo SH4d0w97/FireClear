@@ -1,0 +1,10 @@
+# Ads, recommendations and tracking only. The safest option (tool menu 1).
+# Every line is also in packages.txt. Missing packages are skipped.
+com.amazon.tv.acr
+com.amazon.hybridadidservice
+com.amazon.media.recommendations
+com.amazon.device.telemetry.emitter
+com.amazon.dp.logger
+com.amazon.perfcollection
+com.amazon.wirelessmetrics.service
+com.amazon.shoptv.client
