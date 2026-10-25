@@ -33,17 +33,14 @@ Amazon's Fire TV home screen is full of autoplay video ads, banners, and backgro
  9:41                              [ Wi-Fi ]  [ Customize ]  [ Settings ]
  Sunday, 25 October
 
- FAVORITES
- [ YouTube ]  [[ Prime Video ]]  [ Plex ]  [ Music ]     ← focused tile lifts & scales
-
- RECENT
- [ Kodi ]  [ Downloader ]  [ Photos ]  [ Browser ]
+ FAVORITES (DOCK)
+ ┌──────────────────────────────────────────────────────────────┐
+ │  [ YouTube ]   [[ Prime Video ]]   [ Plex ]   [ Netflix ]    │  ← 4-App Dock Shelf
+ └──────────────────────────────────────────────────────────────┘
+                     Prime Video (lifts, scales & glows)
 
  APPS
- [ Appstore ]  [ Calendar ]  [ Files ]  [ Weather ]  ...
-
- SETTINGS
- [ All Settings ]  [ Wi-Fi ]  [ Bluetooth ]  [ Display ]  [ Sound ]  ...
+ [ Kodi ]  [ Downloader ]  [ Photos ]  [ Browser ]  [ Files ]  ...
 ```
 
 No libraries. No network. No background services. Zero dependencies.
@@ -384,9 +381,11 @@ Then in FireClear: **Customize → Custom photo**. JPG or PNG, up to 25 MB, 1920
 | **Up** from the top row | Reaches the top bar: Wi-Fi, Customize, Settings |
 | **Home** while already home | Glides back to the first tile |
 
-**Rows:** Favorites → Recent → Apps → Settings
+**Layout:** 4-App Favorites Dock (Top Shelf) → Apps Grid
 
-**Settings row tiles:** Wi-Fi, Bluetooth, Display, Sound, Apps, Storage, Date & Time, Language, Keyboard, Accessibility, Privacy, Developer, About — plus **All Settings** which always works.
+**Dock Management:** Hold **OK** or press **Menu (☰)** on any app to pin it to a dock slot (1–4), move it left/right within the dock, or remove it.
+
+**System Settings:** Available at any time via the **Settings** pill in the top status bar (one-click access to full Fire TV settings).
 
 **Customize menu:** 5 built-in wallpapers, Custom photo, Unhide all apps, Animations On/Off.
 
@@ -414,7 +413,7 @@ Full threat model: [docs/SECURITY.md](docs/SECURITY.md). Verify yourself in 30 s
 | Permissions | `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE` only |
 | Dependencies | **0** |
 
-**What's new in 2.3:** tool menu gains **Remove ads only**, **Ad-blocking DNS on/off** (with automatic rollback), safer package-list parsing, and fully rewritten docs.
+**What's new in 2.3:** tvOS-style 4-app Favorites Dock with interactive slot management, white glow focus animations, clutter-free home screen, tool menu with **Remove ads only** and **Ad-blocking DNS on/off** (with automatic rollback), and hardened release workflow.
 
 ---
 

@@ -50,10 +50,13 @@ import java.io.File
 import java.util.Collections
 import java.util.concurrent.Executors
 
-/** Custom wallpapers above this size are ignored (another app could drop a huge file in our folder). */
+/** Custom wallpapers above this size are ignored. */
 private const val MAX_WALLPAPER_BYTES = 25L * 1024 * 1024
 
-/** Scroll views that never jump on focus: MainActivity glides them itself (tvOS-style centring). */
+/** Constant count of apps in the top favorites dock. */
+private const val DOCK_SLOT_COUNT = 4
+
+/** Scroll views that never jump on focus: MainActivity glides them smoothly. */
 private class CalmHScroll(c: Context) : HorizontalScrollView(c) {
     init { overScrollMode = View.OVER_SCROLL_NEVER }
     override fun computeScrollDeltaToGetChildRectOnScreen(rect: Rect?): Int = 0
@@ -64,19 +67,17 @@ private class CalmVScroll(c: Context) : ScrollView(c) {
     override fun computeScrollDeltaToGetChildRectOnScreen(rect: Rect?): Int = 0
 }
 
-private class Shortcut(val title: String, val action: String)
-
 class MainActivity : Activity() {
 
-    private class Sec(val id: String, val header: View, val hs: HorizontalScrollView, val row: LinearLayout) {
+    private class Sec(val id: String, val header: View?, val hs: HorizontalScrollView?, val row: LinearLayout) {
         var anim: ObjectAnimator? = null
     }
 
     private val ui = Handler(Looper.getMainLooper())
     private val worker = Executors.newSingleThreadExecutor()
-    private val decel = DecelerateInterpolator(1.4f)
+    private val decel = DecelerateInterpolator(1.6f)
 
-    // Art is rendered once at exact tile size, then shared. 12 MB cap keeps RAM low.
+    // Art is rendered once at exact tile size, then cached. 12 MB cap keeps RAM minimal.
     private val cache = object : LruCache<String, Bitmap>(12 * 1024 * 1024) {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
     }
@@ -109,24 +110,6 @@ class MainActivity : Activity() {
         "Graphite" to intArrayOf(0xFF0D0D10.toInt(), 0xFF1F2128.toInt(), 0xFF3A3D49.toInt())
     )
 
-    // Every system settings page we know about. Only the ones this Fire OS can open are shown.
-    private val shortcuts = listOf(
-        Shortcut("All Settings", Settings.ACTION_SETTINGS),
-        Shortcut("Wi-Fi", Settings.ACTION_WIFI_SETTINGS),
-        Shortcut("Bluetooth", Settings.ACTION_BLUETOOTH_SETTINGS),
-        Shortcut("Display", Settings.ACTION_DISPLAY_SETTINGS),
-        Shortcut("Sound", "android.settings.SOUND_SETTINGS"),
-        Shortcut("Apps", Settings.ACTION_MANAGE_ALL_APPLICATIONS_SETTINGS),
-        Shortcut("Storage", Settings.ACTION_INTERNAL_STORAGE_SETTINGS),
-        Shortcut("Date & Time", Settings.ACTION_DATE_SETTINGS),
-        Shortcut("Language", Settings.ACTION_LOCALE_SETTINGS),
-        Shortcut("Keyboard", Settings.ACTION_INPUT_METHOD_SETTINGS),
-        Shortcut("Accessibility", Settings.ACTION_ACCESSIBILITY_SETTINGS),
-        Shortcut("Privacy", Settings.ACTION_PRIVACY_SETTINGS),
-        Shortcut("Developer", Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS),
-        Shortcut("About", Settings.ACTION_DEVICE_INFO_SETTINGS)
-    )
-
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
     private fun ms(v: Long) = if (reduce) 0L else v
 
@@ -136,7 +119,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         prefs = getSharedPreferences("launcher", MODE_PRIVATE)
         reduce = prefs.getBoolean("reduce", false)
-        getExternalFilesDir(null) // make sure the custom-wallpaper folder exists
+        getExternalFilesDir(null)
 
         val root = FrameLayout(this)
         wallpaper = ImageView(this).apply { scaleType = ImageView.ScaleType.FIT_XY }
@@ -144,6 +127,7 @@ class MainActivity : Activity() {
 
         val page = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; clipChildren = false }
 
+        // tvOS-style sleek top header: clock, date, and status pills
         val timeV = TextClock(this).apply {
             format12Hour = "h:mm"; format24Hour = "HH:mm"
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 36f)
@@ -162,7 +146,7 @@ class MainActivity : Activity() {
         val bar = LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL
             clipChildren = false
-            setPadding(dp(56), dp(22), dp(56), dp(2))
+            setPadding(dp(56), dp(24), dp(56), dp(8))
         }
         bar.addView(left, LinearLayout.LayoutParams(0, -2, 1f))
         wifiIcon = WifiView(this)
@@ -175,7 +159,7 @@ class MainActivity : Activity() {
         content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             clipChildren = false
-            setPadding(0, dp(4), 0, dp(60))
+            setPadding(0, dp(4), 0, dp(64))
         }
         scroll = CalmVScroll(this).apply {
             isVerticalScrollBarEnabled = false
@@ -187,7 +171,7 @@ class MainActivity : Activity() {
         page.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         root.addView(page, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
-        window.setBackgroundDrawable(null) // wallpaper already covers the screen: skip one full-screen fill
+        window.setBackgroundDrawable(null)
         applyWallpaper()
     }
 
@@ -207,7 +191,6 @@ class MainActivity : Activity() {
         worker.shutdownNow()
     }
 
-    // Home pressed while we're already on top: glide back to the first tile
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         allTiles().firstOrNull()?.requestFocus()
@@ -221,7 +204,7 @@ class MainActivity : Activity() {
     @Deprecated("Home screen: Back does nothing")
     override fun onBackPressed() {}
 
-    // ───────────────────────── data ─────────────────────────
+    // ───────────────────────── data & dock ─────────────────────────
 
     private fun loadApps(): List<ResolveInfo> {
         val pm = packageManager
@@ -239,6 +222,22 @@ class MainActivity : Activity() {
         prefs.edit().putString(k, l.joinToString("\n")).apply()
     }
 
+    /** Returns the 4 packages assigned to the dock, auto-filling remaining slots if needed. */
+    private fun getDockPackages(all: List<ResolveInfo>): List<String> {
+        val hidden = prefs.getStringSet("hidden", emptySet<String>()) ?: emptySet()
+        val byPkg = all.associateBy { it.activityInfo.packageName }
+        val explicit = list("fav").filter { it in byPkg && it !in hidden }.distinct().toMutableList()
+
+        for (app in all) {
+            if (explicit.size >= DOCK_SLOT_COUNT) break
+            val pkg = app.activityInfo.packageName
+            if (pkg !in explicit && pkg !in hidden) {
+                explicit.add(pkg)
+            }
+        }
+        return explicit.take(DOCK_SLOT_COUNT)
+    }
+
     private fun currentSig(a: String) =
         a + "|" + prefs.getString("fav", "") + "|" + prefs.getString("rec", "") + "|" +
             prefs.getStringSet("hidden", emptySet<String>()).toString()
@@ -250,33 +249,28 @@ class MainActivity : Activity() {
         if (currentSig(aSig) != signature) rebuild(all)
     }
 
-    // ───────────────────────── home rows ─────────────────────────
+    // ───────────────────────── tvOS Layout ─────────────────────────
 
     private fun rebuild(all: List<ResolveInfo> = loadApps()) {
-        val hidden = prefs.getStringSet("hidden", emptySet<String>())!!
+        val hidden = prefs.getStringSet("hidden", emptySet<String>()) ?: emptySet()
         val byPkg = all.associateBy { it.activityInfo.packageName }
-        val favs = list("fav").filter { byPkg.containsKey(it) && it !in hidden }.mapNotNull { byPkg[it] }
-        val recents = list("rec").filter { byPkg.containsKey(it) && it !in hidden }.take(10).mapNotNull { byPkg[it] }
-        val shown = all.filter { it.activityInfo.packageName !in hidden }
-        val sets = shortcuts.filter {
-            it.action == Settings.ACTION_SETTINGS || Intent(it.action).resolveActivity(packageManager) != null
-        }
-        signature = currentSig(appSig)
 
+        val dockPkgs = getDockPackages(all)
+        val dockApps = dockPkgs.mapNotNull { byPkg[it] }
+
+        val otherApps = all.filter { it.activityInfo.packageName !in hidden && it.activityInfo.packageName !in dockPkgs }
+
+        signature = currentSig(appSig)
         content.removeAllViews()
         sections.clear()
 
-        if (favs.isEmpty()) {
-            addSection("fav", "FAVORITES") { _, _ -> }
-            hint("Hold OK or press the menu button on any app to add it here")
-        } else {
-            addSection("fav", "FAVORITES") { row, sec -> favs.forEach { row.addView(appTile(it, sec, true)) } }
+        // 1. APPLE TV-STYLE 4-APP FAVORITES DOCK
+        addDockSection(dockApps, byPkg)
+
+        // 2. APPS ROWS BELOW THE DOCK
+        if (otherApps.isNotEmpty()) {
+            addAppsSection("all", "APPS", otherApps)
         }
-        if (recents.isNotEmpty()) {
-            addSection("rec", "RECENT") { row, sec -> recents.forEach { row.addView(appTile(it, sec, false)) } }
-        }
-        addSection("all", "APPS") { row, sec -> shown.forEach { row.addView(appTile(it, sec, false)) } }
-        addSection("set", "SETTINGS") { row, sec -> sets.forEach { row.addView(settingTile(it, sec)) } }
 
         content.viewTreeObserver.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
             override fun onGlobalLayout() {
@@ -289,7 +283,7 @@ class MainActivity : Activity() {
                     animateIn = false
                     content.alpha = 0f
                     content.translationY = dp(24).toFloat()
-                    content.animate().alpha(1f).translationY(0f).setDuration(ms(380))
+                    content.animate().alpha(1f).translationY(0f).setDuration(ms(360))
                         .setInterpolator(decel).withLayer().start()
                 }
             }
@@ -298,70 +292,143 @@ class MainActivity : Activity() {
 
     private fun allTiles(): List<View> {
         val out = ArrayList<View>()
-        for (s in sections) for (j in 0 until s.row.childCount) out.add(s.row.getChildAt(j))
+        for (s in sections) {
+            for (j in 0 until s.row.childCount) out.add(s.row.getChildAt(j))
+        }
         return out
     }
 
-    private fun addSection(id: String, title: String, fill: (LinearLayout, Sec) -> Unit) {
+    /** Apple tvOS 4-App Favorites Dock with translucent glass shelf pedestal. */
+    private fun addDockSection(dockApps: List<ResolveInfo>, byPkg: Map<String, ResolveInfo>) {
+        val head = TextView(this).apply {
+            text = "FAVORITES"
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            setTextColor(0x99FFFFFF.toInt())
+            letterSpacing = 0.16f
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            setPadding(dp(56), dp(16), 0, dp(8))
+        }
+        content.addView(head)
+
+        val dockRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            clipChildren = false
+            clipToPadding = false
+        }
+
+        // Translucent glass shelf background
+        val shelf = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            clipChildren = false
+            clipToPadding = false
+            setPadding(dp(22), dp(14), dp(22), dp(18))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(26).toFloat()
+                setColor(0x1AFFFFFF)
+                setStroke(dp(1), 0x22FFFFFF.toInt())
+            }
+            addView(dockRow)
+        }
+
+        val shelfContainer = FrameLayout(this).apply {
+            clipChildren = false
+            clipToPadding = false
+            setPadding(dp(56), dp(4), dp(56), dp(20))
+            addView(shelf, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER_HORIZONTAL))
+        }
+        content.addView(shelfContainer)
+
+        val sec = Sec("dock", head, null, dockRow)
+        sections.add(sec)
+
+        dockApps.forEachIndexed { slot, ri ->
+            dockRow.addView(appTile(ri, sec, big = true, isDock = true, dockSlot = slot, byPkg = byPkg))
+        }
+    }
+
+    /** Smooth horizontally scrolling row for remaining apps. */
+    private fun addAppsSection(id: String, title: String, apps: List<ResolveInfo>) {
         val head = TextView(this).apply {
             text = title
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
             setTextColor(0x99FFFFFF.toInt())
             letterSpacing = 0.14f
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            setPadding(dp(56), dp(14), 0, 0)
+            setPadding(dp(56), dp(18), 0, dp(4))
         }
         content.addView(head)
-        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; clipChildren = false }
+
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            clipChildren = false
+            clipToPadding = false
+        }
         val hs = CalmHScroll(this).apply {
             isHorizontalScrollBarEnabled = false
             clipToPadding = false
             clipChildren = false
-            setPadding(dp(46), dp(22), dp(46), dp(26))
+            setPadding(dp(46), dp(16), dp(46), dp(24))
             addView(row)
         }
         content.addView(hs)
         val sec = Sec(id, head, hs, row)
         sections.add(sec)
-        fill(row, sec)
+
+        val byPkg = apps.associateBy { it.activityInfo.packageName }
+        apps.forEach { row.addView(appTile(it, sec, big = false, isDock = false, dockSlot = -1, byPkg = byPkg)) }
     }
 
-    private fun hint(t: String) {
-        content.addView(TextView(this).apply {
-            text = t
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
-            setTextColor(0x88FFFFFF.toInt())
-            setPadding(dp(56), dp(10), 0, dp(10))
-        })
-    }
+    // ───────────────────────── Tiles & tvOS Animations ─────────────────────────
 
-    // ───────────────────────── tiles ─────────────────────────
-
-    private fun appTile(ri: ResolveInfo, sec: Sec, big: Boolean): View {
+    private fun appTile(
+        ri: ResolveInfo,
+        sec: Sec,
+        big: Boolean,
+        isDock: Boolean,
+        dockSlot: Int,
+        byPkg: Map<String, ResolveInfo>
+    ): View {
         val pkg = ri.activityInfo.packageName
         val cls = ri.activityInfo.name
         val name = ri.loadLabel(packageManager).toString()
-        return tile(sec, pkg, name, big, { w, h, r -> appArt(ri, w, h, r) },
-            { launch(pkg, cls) }, { menu(pkg, name) })
+        return tile(
+            sec = sec,
+            id = pkg,
+            name = name,
+            big = big,
+            make = { w, h, r -> appArt(ri, w, h, r) },
+            click = { launch(pkg, cls) },
+            long = { openTileMenu(pkg, name, isDock, dockSlot, byPkg) }
+        )
     }
 
-    private fun settingTile(s: Shortcut, sec: Sec): View =
-        tile(sec, "set:" + s.title, s.title, false, { w, h, r -> cardArt(s.title, w, h, r) },
-            { openSettings(s.action) }, null)
-
     private fun tile(
-        sec: Sec, id: String, name: String, big: Boolean,
-        make: (Int, Int, Float) -> Bitmap, click: () -> Unit, long: (() -> Unit)?
+        sec: Sec,
+        id: String,
+        name: String,
+        big: Boolean,
+        make: (Int, Int, Float) -> Bitmap,
+        click: () -> Unit,
+        long: (() -> Unit)?
     ): View {
-        val w = dp(if (big) 232 else 176)
-        val h = dp(if (big) 130 else 99)
-        val r = dp(14).toFloat()
+        val w = dp(if (big) 230 else 180)
+        val h = dp(if (big) 130 else 101)
+        val r = dp(if (big) 16 else 13).toFloat()
         val key = sec.id + "|" + id
         val artKey = id + "|" + w
+
+        val border = GradientDrawable().apply {
+            cornerRadius = r
+            setColor(Color.TRANSPARENT)
+            setStroke(0, Color.TRANSPARENT)
+        }
 
         val img = ImageView(this).apply {
             scaleType = ImageView.ScaleType.FIT_XY
             background = GradientDrawable().apply { setColor(0xFF1E2640.toInt()); cornerRadius = r }
+            foreground = border
             tag = artKey
             outlineProvider = object : ViewOutlineProvider() {
                 override fun getOutline(v: View, o: Outline) { o.setRoundRect(0, 0, v.width, v.height, r) }
@@ -371,38 +438,63 @@ class MainActivity : Activity() {
 
         val label = TextView(this).apply {
             text = name
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
             alpha = 0f
-            setPadding(0, dp(18), 0, 0)
+            setPadding(0, dp(14), 0, 0)
         }
+
         return LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
             clipChildren = false
+            clipToPadding = false
             isFocusable = true
             isClickable = true
             tag = key
             addView(img, LinearLayout.LayoutParams(w, h))
             addView(label, LinearLayout.LayoutParams(w, -2))
-            layoutParams = LinearLayout.LayoutParams(-2, -2).apply { setMargins(dp(10), 0, dp(10), 0) }
+            layoutParams = LinearLayout.LayoutParams(-2, -2).apply {
+                setMargins(dp(if (big) 12 else 10), 0, dp(if (big) 12 else 10), 0)
+            }
+
+            // Apple tvOS focus animation: lift, scale, glow ring, dynamic shadow, and smooth label fade
             setOnFocusChangeListener { v, f ->
-                val s = if (f) 1.1f else 1f
-                img.animate().scaleX(s).scaleY(s)
-                    .translationY(if (f) -dp(6).toFloat() else 0f)
-                    .translationZ(if (f) dp(18).toFloat() else 0f)
-                    .setInterpolator(decel).setDuration(ms(190)).start()
-                label.animate().alpha(if (f) 1f else 0f).setDuration(ms(160)).start()
-                if (f) { lastKey = key; onTileFocused(v, sec) }
+                val s = if (f) (if (big) 1.12f else 1.15f) else 1.0f
+                val lift = if (f) -dp(8).toFloat() else 0f
+                val shadowZ = if (f) dp(28).toFloat() else 0f
+
+                border.setStroke(dp(3), if (f) 0xF2FFFFFF.toInt() else Color.TRANSPARENT)
+
+                img.animate()
+                    .scaleX(s)
+                    .scaleY(s)
+                    .translationY(lift)
+                    .translationZ(shadowZ)
+                    .setInterpolator(decel)
+                    .setDuration(ms(180))
+                    .withLayer()
+                    .start()
+
+                label.animate()
+                    .alpha(if (f) 1f else 0f)
+                    .setDuration(ms(150))
+                    .start()
+
+                if (f) {
+                    lastKey = key
+                    onTileFocused(v, sec)
+                }
             }
             setOnClickListener { click() }
             if (long != null) setOnLongClickListener { long(); true }
         }
     }
 
-    /** Renders art off the main thread, once per size; later uses hit the cache instantly. */
+    /** Off-thread art rendering; subsequent draws hit the 12 MB RAM cache instantly. */
     private fun loadArt(img: ImageView, artKey: String, make: () -> Bitmap) {
         val hit = cache.get(artKey)
         if (hit != null) { img.background = null; img.setImageBitmap(hit); return }
@@ -418,7 +510,7 @@ class MainActivity : Activity() {
                     img.background = null
                     img.alpha = 0f
                     img.setImageBitmap(done)
-                    img.animate().alpha(1f).setDuration(ms(180)).start()
+                    img.animate().alpha(1f).setDuration(ms(160)).start()
                 }
             }
         }
@@ -435,11 +527,11 @@ class MainActivity : Activity() {
             banner.draw(c)
         } else {
             val p = Paint().apply {
-                shader = LinearGradient(0f, 0f, 0f, h.toFloat(), 0xFF303C6C.toInt(), 0xFF1A2040.toInt(), Shader.TileMode.CLAMP)
+                shader = LinearGradient(0f, 0f, 0f, h.toFloat(), 0xFF2E3965.toInt(), 0xFF171D3A.toInt(), Shader.TileMode.CLAMP)
             }
             c.drawRect(0f, 0f, w.toFloat(), h.toFloat(), p)
             val icon = ri.loadIcon(pm)
-            val s = (h * 0.6f).toInt()
+            val s = (h * 0.58f).toInt()
             val l = (w - s) / 2
             val t = (h - s) / 2
             icon.setBounds(l, t, l + s, t + s)
@@ -448,25 +540,6 @@ class MainActivity : Activity() {
         return rounded(src, r)
     }
 
-    private fun cardArt(title: String, w: Int, h: Int, r: Float): Bitmap {
-        val src = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-        val c = Canvas(src)
-        val bg = Paint().apply {
-            shader = LinearGradient(0f, 0f, w.toFloat(), h.toFloat(), 0xFF2B3358.toInt(), 0xFF171C36.toInt(), Shader.TileMode.CLAMP)
-        }
-        c.drawRect(0f, 0f, w.toFloat(), h.toFloat(), bg)
-        val tp = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.WHITE
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            textAlign = Paint.Align.CENTER
-            textSize = h * 0.2f
-        }
-        while (tp.measureText(title) > w * 0.84f && tp.textSize > 8f) tp.textSize -= 1f
-        c.drawText(title, w / 2f, h / 2f - (tp.descent() + tp.ascent()) / 2f, tp)
-        return rounded(src, r)
-    }
-
-    /** Anti-aliased rounded corners baked into the bitmap: no clipping work at draw time. */
     private fun rounded(src: Bitmap, r: Float): Bitmap {
         val out = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
         val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -477,22 +550,25 @@ class MainActivity : Activity() {
         return out
     }
 
-    // ───────────────────────── smooth scrolling ─────────────────────────
+    // ───────────────────────── Smooth Scrolling ─────────────────────────
 
     private fun onTileFocused(tile: View, sec: Sec) {
         val hs = sec.hs
-        val maxX = maxOf(0, sec.row.right + hs.paddingRight - hs.width)
-        val wantX = (sec.row.left + tile.left + tile.width / 2 - hs.width / 2).coerceIn(0, maxX)
-        sec.anim?.cancel()
-        if (restoring) hs.scrollTo(wantX, 0)
-        else if (hs.scrollX != wantX) {
-            sec.anim = ObjectAnimator.ofInt(hs, "scrollX", hs.scrollX, wantX).apply {
-                duration = ms(240); interpolator = decel; start()
+        if (hs != null) {
+            val maxX = maxOf(0, sec.row.right + hs.paddingRight - hs.width)
+            val wantX = (sec.row.left + tile.left + tile.width / 2 - hs.width / 2).coerceIn(0, maxX)
+            sec.anim?.cancel()
+            if (restoring) hs.scrollTo(wantX, 0)
+            else if (hs.scrollX != wantX) {
+                sec.anim = ObjectAnimator.ofInt(hs, "scrollX", hs.scrollX, wantX).apply {
+                    duration = ms(240); interpolator = decel; start()
+                }
             }
         }
 
+        val headerTop = sec.header?.top ?: 0
         val maxY = maxOf(0, content.height - scroll.height)
-        glideY(if (sections.firstOrNull() === sec) 0 else (sec.header.top - dp(8)).coerceIn(0, maxY))
+        glideY(if (sections.firstOrNull() === sec) 0 else (headerTop - dp(8)).coerceIn(0, maxY))
     }
 
     private fun glideY(wantY: Int) {
@@ -505,7 +581,7 @@ class MainActivity : Activity() {
         }
     }
 
-    // ───────────────────────── actions ─────────────────────────
+    // ───────────────────────── Actions & Dock Management ─────────────────────────
 
     private fun launch(pkg: String, cls: String) {
         val rec = list("rec").toMutableList()
@@ -519,36 +595,86 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun menu(pkg: String, name: String) {
-        val favs = list("fav").toMutableList()
+    /** Contextual tvOS menu for rearranging the 4-app Favorites Dock, hiding apps, or viewing app info. */
+    private fun openTileMenu(
+        pkg: String,
+        name: String,
+        isDock: Boolean,
+        dockSlot: Int,
+        byPkg: Map<String, ResolveInfo>
+    ) {
+        val all = loadApps()
+        val currentDock = getDockPackages(all).toMutableList()
         val labels = ArrayList<String>()
         val actions = ArrayList<() -> Unit>()
+
         fun opt(t: String, a: () -> Unit) { labels.add(t); actions.add(a) }
 
-        val i = favs.indexOf(pkg)
-        if (i >= 0) {
-            opt("Remove from Favorites") { favs.removeAt(i); save("fav", favs); rebuild() }
+        if (isDock) {
+            if (dockSlot > 0) {
+                opt("Move Left in Dock") {
+                    Collections.swap(currentDock, dockSlot, dockSlot - 1)
+                    save("fav", currentDock)
+                    lastKey = "dock|$pkg"
+                    rebuild()
+                }
+            }
+            if (dockSlot < currentDock.size - 1) {
+                opt("Move Right in Dock") {
+                    Collections.swap(currentDock, dockSlot, dockSlot + 1)
+                    save("fav", currentDock)
+                    lastKey = "dock|$pkg"
+                    rebuild()
+                }
+            }
+            opt("Remove from Dock") {
+                currentDock.remove(pkg)
+                save("fav", currentDock)
+                lastKey = ""
+                rebuild()
+            }
         } else {
-            opt("Add to Favorites") { favs.add(pkg); save("fav", favs); rebuild() }
+            // Pin or replace in one of the 4 dock slots
+            opt("Pin to Dock") {
+                val slotOptions = (0 until DOCK_SLOT_COUNT).map { slot ->
+                    val occupantPkg = currentDock.getOrNull(slot)
+                    val occupantName = if (occupantPkg != null) {
+                        byPkg[occupantPkg]?.loadLabel(packageManager)?.toString() ?: occupantPkg
+                    } else "Empty"
+                    "Slot ${slot + 1} ($occupantName)"
+                }.toTypedArray()
+
+                AlertDialog.Builder(this)
+                    .setTitle("Select Dock Slot")
+                    .setItems(slotOptions) { _, chosenSlot ->
+                        if (chosenSlot < currentDock.size) {
+                            currentDock[chosenSlot] = pkg
+                        } else {
+                            currentDock.add(pkg)
+                        }
+                        save("fav", currentDock.take(DOCK_SLOT_COUNT))
+                        lastKey = "dock|$pkg"
+                        rebuild()
+                    }
+                    .show()
+            }
         }
-        if (i > 0) {
-            opt("Move left") { Collections.swap(favs, i, i - 1); save("fav", favs); lastKey = "fav|$pkg"; rebuild() }
-        }
-        if (i >= 0 && i < favs.size - 1) {
-            opt("Move right") { Collections.swap(favs, i, i + 1); save("fav", favs); lastKey = "fav|$pkg"; rebuild() }
-        }
-        opt("Hide from home") {
+
+        opt("Hide from Home") {
             val hid = prefs.getStringSet("hidden", emptySet<String>())!!.toMutableSet()
             hid.add(pkg)
             prefs.edit().putStringSet("hidden", hid).apply()
-            favs.remove(pkg); save("fav", favs)
+            currentDock.remove(pkg)
+            save("fav", currentDock)
             lastKey = ""
             rebuild()
         }
+
         opt("App info / Uninstall") {
             startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$pkg"))
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
+
         AlertDialog.Builder(this).setTitle(name)
             .setItems(labels.toTypedArray()) { _, which -> actions[which]() }
             .show()
@@ -585,7 +711,7 @@ class MainActivity : Activity() {
         }
     }
 
-    // ───────────────────────── wallpaper ─────────────────────────
+    // ───────────────────────── Wallpaper ─────────────────────────
 
     private fun customFile(): File? {
         val dir = getExternalFilesDir(null) ?: return null
@@ -601,7 +727,6 @@ class MainActivity : Activity() {
         cv.drawRect(0f, 0f, w.toFloat(), h.toFloat(), p)
     }
 
-    /** Presets are one small bitmap stretched by the GPU: a single cheap layer, no gradient maths per frame. */
     private fun gradientBitmap(c: IntArray): Bitmap {
         val w = 640
         val h = 360
@@ -656,7 +781,7 @@ class MainActivity : Activity() {
         }
     }
 
-    // ───────────────────────── top bar bits ─────────────────────────
+    // ───────────────────────── Top Bar Bits ─────────────────────────
 
     private fun pillLp() = LinearLayout.LayoutParams(-2, -2).apply { leftMargin = dp(12) }
 
@@ -664,17 +789,17 @@ class MainActivity : Activity() {
         val bg = GradientDrawable().apply { cornerRadius = dp(30).toFloat(); setColor(0x33FFFFFF) }
         val label = TextView(this).apply {
             this.text = text
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
             setTextColor(Color.WHITE)
         }
         return LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(20), dp(9), dp(22), dp(9))
+            setPadding(dp(18), dp(8), dp(20), dp(8))
             background = bg
             isFocusable = true
             isClickable = true
-            if (icon != null) addView(icon, LinearLayout.LayoutParams(dp(26), dp(20)).apply { rightMargin = dp(10) })
+            if (icon != null) addView(icon, LinearLayout.LayoutParams(dp(24), dp(18)).apply { rightMargin = dp(8) })
             addView(label)
             setOnFocusChangeListener { v, f ->
                 bg.setColor(if (f) 0xF2FFFFFF.toInt() else 0x33FFFFFF)
@@ -698,7 +823,10 @@ class MainActivity : Activity() {
                 caps == null -> { level = 0; text = "Offline" }
                 caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> {
                     val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-                    level = WifiManager.calculateSignalLevel(wm.connectionInfo.rssi, 4).coerceIn(1, 3)
+                    @Suppress("DEPRECATION")
+                    val rssi = wm.connectionInfo.rssi
+                    @Suppress("DEPRECATION")
+                    level = WifiManager.calculateSignalLevel(rssi, 4).coerceIn(1, 3)
                     text = "Wi-Fi"
                 }
                 caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> text = "Ethernet"

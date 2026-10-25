@@ -1,6 +1,12 @@
 # Changelog
 
 ## 2.3
+- **tvOS Launcher Redesign**:
+  - **4-App Favorites Dock (Top Shelf)**: Centered 4-app favorites dock on a translucent glass shelf pedestal with auto-fill symmetry for empty slots.
+  - **Interactive Dock Management**: Reorder dock items with Move Left / Move Right, or pin any app from the grid below into a chosen dock slot (1–4).
+  - **Clutter-Free Home Screen**: Removed the settings tile row from the home screen canvas; full system settings remains accessible with one click via the top-bar status pill.
+  - **tvOS Focus & Depth Animations**: Smooth `1.15x` scale, `-8dp` vertical lift, `28dp` drop shadow elevation, high-contrast white glowing focus ring, and floating title fade-in with a custom cubic deceleration curve.
+  - **Ultra-Low RAM Footprint**: Native Android framework implementation with zero third-party dependencies and a 12 MB LRU bitmap cache for steady 60 FPS performance on Fire TV Sticks.
 - **Debloat Tool Updates**:
   - Added **Remove ads only** (backed by new `packages-ads.txt`) — the safest debloat tier.
   - Added **Ad-blocking DNS on/off** (default: AdGuard DNS) with automated round-trip connectivity test and immediate rollback if offline.
@@ -8,8 +14,9 @@
   - Numbered menu layout with clear categories for ad removal, debloat, DNS, APK install, and home screen toggles.
 - **CI / Build Modernization**:
   - Updated toolchain to Gradle 8.11.1, Android Gradle Plugin (AGP) 8.7.3, and Kotlin 2.0.21.
-  - Streamlined GitHub Actions workflows (`build.yml`, `codeql.yml`, `release.yml`) to use standard v4 actions with automated tool provisioning.
+  - Streamlined GitHub Actions workflows (`build.yml`, `codeql.yml`, `release.yml`) using standard v4 actions with automated tool provisioning.
   - Upgraded compiled APK permission verification in `scripts/verify-apk.sh` with dual `aapt`/`aapt2` fallback and regex extraction.
+  - Hardened automated release workflow with dedicated `scripts/bump-version.py`.
 - **Audit & Security**:
   - Expanded `scripts/audit.sh` static analysis across all package lists (`packages-ads.txt` and `packages.txt`).
 - **Documentation**:
