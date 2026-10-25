@@ -486,7 +486,7 @@ class MainActivity : Activity() {
         sec.anim?.cancel()
         if (restoring) hs.scrollTo(wantX, 0)
         else if (hs.scrollX != wantX) {
-            sec.anim = ObjectAnimator.ofInt(hs, View.SCROLL_X, hs.scrollX, wantX).apply {
+            sec.anim = ObjectAnimator.ofInt(hs, "scrollX", hs.scrollX, wantX).apply {
                 duration = ms(240); interpolator = decel; start()
             }
         }
@@ -499,7 +499,7 @@ class MainActivity : Activity() {
         vAnim?.cancel()
         if (restoring) scroll.scrollTo(0, wantY)
         else if (scroll.scrollY != wantY) {
-            vAnim = ObjectAnimator.ofInt(scroll, View.SCROLL_Y, scroll.scrollY, wantY).apply {
+            vAnim = ObjectAnimator.ofInt(scroll, "scrollY", scroll.scrollY, wantY).apply {
                 duration = ms(280); interpolator = decel; start()
             }
         }
