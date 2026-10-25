@@ -5,12 +5,12 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-// Optional stable signing (CI release job sets these from repo secrets). Without them you get a debug-signed APK.
-val ksPath: String? = System.getenv("FIRECLEAR_KEYSTORE")
-
 android {
     namespace = "app.fireclear.launcher"
-    compileSdk = 34
+    compileSdk = 35
+
+    val ksPath = System.getenv("FIRECLEAR_KEYSTORE")
+
     defaultConfig {
         applicationId = "app.fireclear.launcher"
         minSdk = 25
@@ -24,7 +24,8 @@ android {
                 storeFile = file(ksPath)
                 storePassword = System.getenv("FIRECLEAR_KS_PASS")
                 keyAlias = System.getenv("FIRECLEAR_KEY_ALIAS")
-                keyPassword = System.getenv("FIRECLEAR_KEY_PASS")
+                val kp = System.getenv("FIRECLEAR_KEY_PASS")
+                keyPassword = if (!kp.isNullOrBlank()) kp else System.getenv("FIRECLEAR_KS_PASS")
             }
         }
     }

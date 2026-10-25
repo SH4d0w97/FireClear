@@ -93,7 +93,7 @@ jobs:
           KS_B64: ${{ secrets.FIRECLEAR_KEYSTORE_B64 }}
         run: |
           if [ -n "${KS_B64:-}" ]; then
-            echo "${KS_B64}" | base64 -d > "${RUNNER_TEMP}/release.jks"
+            printf '%s' "${KS_B64}" | base64 -d > "${RUNNER_TEMP}/release.jks"
             echo "FIRECLEAR_KEYSTORE=${RUNNER_TEMP}/release.jks" >> "${GITHUB_ENV}"
           fi
 
@@ -104,10 +104,12 @@ jobs:
           FIRECLEAR_KEY_ALIAS: ${{ secrets.FIRECLEAR_KEY_ALIAS }}
           FIRECLEAR_KEY_PASS: ${{ secrets.FIRECLEAR_KEY_PASS }}
         run: |
+          KEY_PASS="${FIRECLEAR_KEY_PASS:-$FIRECLEAR_KS_PASS}"
           if [ -n "${FIRECLEAR_KEYSTORE:-}" ] \
             && [ -n "${FIRECLEAR_KS_PASS:-}" ] \
             && [ -n "${FIRECLEAR_KEY_ALIAS:-}" ] \
-            && [ -n "${FIRECLEAR_KEY_PASS:-}" ]; then
+            && [ -n "${KEY_PASS:-}" ]; then
+            export FIRECLEAR_KEY_PASS="${KEY_PASS}"
             gradle --no-daemon assembleRelease
             echo "apk_path=app/build/outputs/apk/release/app-release.apk" >> "${GITHUB_OUTPUT}"
             echo "signed=true" >> "${GITHUB_OUTPUT}"
