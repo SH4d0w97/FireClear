@@ -11,8 +11,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Make gradlew executable
-        run: chmod +x gradlew
       - name: Static security audit
         run: bash scripts/audit.sh
       - uses: actions/setup-java@v4
@@ -20,10 +18,12 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
       - name: Android lint
-        run: ./gradlew --no-daemon lintDebug
+        run: gradle --no-daemon lintDebug
       - name: Build debug APK
-        run: ./gradlew --no-daemon assembleDebug
+        run: gradle --no-daemon assembleDebug
       - name: Verify permissions of the built APK
         run: bash scripts/verify-apk.sh app/build/outputs/apk/debug/app-debug.apk
       - name: Checksum
