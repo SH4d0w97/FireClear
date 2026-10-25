@@ -105,15 +105,28 @@ jobs:
           FIRECLEAR_KEY_PASS: ${{ secrets.FIRECLEAR_KEY_PASS }}
         run: |
           KEY_PASS="${FIRECLEAR_KEY_PASS:-$FIRECLEAR_KS_PASS}"
+          SIGNED="false"
           if [ -n "${FIRECLEAR_KEYSTORE:-}" ] \
             && [ -n "${FIRECLEAR_KS_PASS:-}" ] \
             && [ -n "${FIRECLEAR_KEY_ALIAS:-}" ] \
             && [ -n "${KEY_PASS:-}" ]; then
             export FIRECLEAR_KEY_PASS="${KEY_PASS}"
-            gradle --no-daemon assembleRelease
+            # Verify credentials with keytool before running assembleRelease
+            if keytool -list -v -keystore "${FIRECLEAR_KEYSTORE}" -alias "${FIRECLEAR_KEY_ALIAS}" -storepass "${FIRECLEAR_KS_PASS}" -keypass "${KEY_PASS}" >/dev/null 2>&1; then
+              echo "Keystore credentials verified successfully."
+              if gradle --no-daemon assembleRelease; then
+                SIGNED="true"
+              fi
+            else
+              echo "::warning::Keystore credentials failed verification (wrong password or alias mismatch). Falling back to assembleDebug."
+            fi
+          fi
+
+          if [ "${SIGNED}" = "true" ]; then
             echo "apk_path=app/build/outputs/apk/release/app-release.apk" >> "${GITHUB_OUTPUT}"
             echo "signed=true" >> "${GITHUB_OUTPUT}"
           else
+            unset FIRECLEAR_KEYSTORE
             gradle --no-daemon assembleDebug
             echo "apk_path=app/build/outputs/apk/debug/app-debug.apk" >> "${GITHUB_OUTPUT}"
             echo "signed=false" >> "${GITHUB_OUTPUT}"
