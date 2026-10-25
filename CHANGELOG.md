@@ -1,5 +1,8 @@
 # Changelog
 
+## 5.0.1 - 2026-10-25
+- Automated patch release bump from 5.0.0 (versionCode 14) to 5.0.1 (versionCode 15).
+
 ## 5.0.0 - 2026-10-25
 - Automated major release bump from 4.0.1 (versionCode 13) to 5.0.0 (versionCode 14).
 
