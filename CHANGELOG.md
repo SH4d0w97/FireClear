@@ -1,5 +1,8 @@
 # Changelog
 
+## 5.0.1 - 2026-10-25
+- Automated patch release bump from 5.0.0 (versionCode 14) to 5.0.1 (versionCode 15).
+
 ## 5.1.0 - 2026-10-26
 - **tvOS-Inspired Visual Polish & Adaptive Launcher Icon**:
   - **Official Adaptive & Legacy App Icons**: Integrated 432x432 foreground flame layer (ic_launcher_foreground.png), dark solid background layer (ic_launcher_background.png), API 26+ <adaptive-icon> XML definition, and pre-Oreo multi-density mipmaps (mdpi through xxxhdpi).
