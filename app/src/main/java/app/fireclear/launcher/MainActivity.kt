@@ -61,11 +61,12 @@ private const val DOCK_SLOT_COUNT = 4
 private const val APPS_PER_ROW = 5
 
 // ───────────────────────── Smart TV Launcher Design Tokens ─────────────────────────
-private const val COLOR_MIDNIGHT_BLACK = 0xFF0B0F14.toInt() // #0B0F14
-private const val COLOR_SMOKY_CHARCOAL = 0xFF20252D.toInt() // #20252D
-private const val COLOR_SOFT_WHITE     = 0xFFFFFFFF.toInt() // #FFFFFF
-private const val COLOR_COOL_GRAY      = 0xFFC3CAD3.toInt() // #C3CAD3
-private const val COLOR_MUTED_BLUE     = 0xFF597A91.toInt() // #597A91
+private const val COLOR_MIDNIGHT_BLACK = 0xFF080C14.toInt() // #080C14 (Deep Midnight Navy base)
+private const val COLOR_SMOKY_CHARCOAL = 0xFF1B222D.toInt() // #1B222D (Frosted Charcoal surface)
+private const val COLOR_SOFT_WHITE     = 0xFFFFFFFF.toInt() // #FFFFFF (Crisp Soft White)
+private const val COLOR_COOL_GRAY      = 0xFFB4BFCD.toInt() // #B4BFCD (Cool Slate Gray secondary)
+private const val COLOR_MUTED_BLUE     = 0xFF4D6D85.toInt() // #4D6D85 (Ambient Blue fallback)
+private const val COLOR_TEXT_DARK      = 0xFF0E131A.toInt() // #0E131A (Ink Dark for white surfaces)
 
 /** Smooth vertical scroll view that never jumps on focus. */
 private class CalmVScroll(c: Context) : ScrollView(c) {
@@ -86,13 +87,13 @@ private class ContrastGradientView(c: Context) : View(c) {
         val hF = h.toFloat()
         val wF = w.toFloat()
         pTop.shader = LinearGradient(
-            0f, 0f, 0f, hF * 0.32f,
-            0x7A0B0F14.toInt(), Color.TRANSPARENT,
+            0f, 0f, 0f, hF * 0.30f,
+            0x88080C14.toInt(), Color.TRANSPARENT,
             Shader.TileMode.CLAMP
         )
         pBottom.shader = LinearGradient(
-            0f, hF * 0.48f, 0f, hF,
-            Color.TRANSPARENT, 0x8E0B0F14.toInt(),
+            0f, hF * 0.44f, 0f, hF,
+            Color.TRANSPARENT, 0x99080C14.toInt(),
             Shader.TileMode.CLAMP
         )
     }
@@ -100,8 +101,8 @@ private class ContrastGradientView(c: Context) : View(c) {
     override fun onDraw(cv: Canvas) {
         val wF = width.toFloat()
         val hF = height.toFloat()
-        cv.drawRect(0f, 0f, wF, hF * 0.32f, pTop)
-        cv.drawRect(0f, hF * 0.48f, wF, hF, pBottom)
+        cv.drawRect(0f, 0f, wF, hF * 0.30f, pTop)
+        cv.drawRect(0f, hF * 0.44f, wF, hF, pBottom)
     }
 }
 
@@ -127,9 +128,9 @@ private class AmbientBloomView(c: Context) : View(c) {
         val cg = Color.green(ambientColor)
         val cb = Color.blue(ambientColor)
         p.shader = RadialGradient(
-            w * 0.5f, h * 0.65f, w * 0.62f,
-            intArrayOf(Color.argb(65, cr, cg, cb), Color.argb(22, cr, cg, cb), Color.TRANSPARENT),
-            floatArrayOf(0f, 0.46f, 1f),
+            w * 0.5f, h * 0.68f, w * 0.60f,
+            intArrayOf(Color.argb(55, cr, cg, cb), Color.argb(18, cr, cg, cb), Color.TRANSPARENT),
+            floatArrayOf(0f, 0.45f, 1f),
             Shader.TileMode.CLAMP
         )
         cv.drawRect(0f, 0f, w, h, p)
@@ -190,11 +191,11 @@ class MainActivity : Activity() {
     }
 
     private val presets = listOf(
-        "Cosmos" to intArrayOf(0xFF080D1A.toInt(), 0xFF121B35.toInt(), 0xFF241C48.toInt()),
-        "Sunset" to intArrayOf(0xFF140818.toInt(), 0xFF4E1638.toInt(), 0xFF9E3A30.toInt()),
-        "Pacific" to intArrayOf(0xFF02121E.toInt(), 0xFF083244.toInt(), 0xFF106864.toInt()),
-        "Aurora" to intArrayOf(0xFF03100B.toInt(), 0xFF0A2B1D.toInt(), 0xFF1D5A3A.toInt()),
-        "Slate" to intArrayOf(0xFF0B0D11.toInt(), 0xFF161922.toInt(), 0xFF252936.toInt())
+        "Cosmos" to intArrayOf(0xFF070A10.toInt(), 0xFF0E1526.toInt(), 0xFF191D3A.toInt()),
+        "Pacific" to intArrayOf(0xFF030D16.toInt(), 0xFF082536.toInt(), 0xFF0E4A4C.toInt()),
+        "Aurora" to intArrayOf(0xFF030E0B.toInt(), 0xFF09241B.toInt(), 0xFF154432.toInt()),
+        "Sunset" to intArrayOf(0xFF100714.toInt(), 0xFF3D1330.toInt(), 0xFF7A2E2A.toInt()),
+        "Slate" to intArrayOf(0xFF080A0E.toInt(), 0xFF12151C.toInt(), 0xFF1E232E.toInt())
     )
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
@@ -342,8 +343,8 @@ class MainActivity : Activity() {
             setPadding(dp(4), dp(4), dp(4), dp(4))
             background = GradientDrawable().apply {
                 cornerRadius = dp(24).toFloat()
-                setColor(0xAA20252D.toInt()) // Smoky charcoal (~67% opacity)
-                setStroke(dp(1), 0x24FFFFFF) // Subtle white border (~14% opacity)
+                setColor(0x991B222D.toInt()) // Smoky charcoal (~60% opacity)
+                setStroke(dp(1), 0x20FFFFFF) // Fine translucent border
             }
         }
 
@@ -364,8 +365,8 @@ class MainActivity : Activity() {
         // Interactive Wi-Fi System Pill on Top-Right
         val wifiBg = GradientDrawable().apply {
             cornerRadius = dp(20).toFloat()
-            setColor(0x8020252D.toInt())
-            setStroke(dp(1), 0x22FFFFFF)
+            setColor(0x801B222D.toInt())
+            setStroke(dp(1), 0x20FFFFFF)
         }
         wifiIcon = WifiView(this)
         wifiText = TextView(this).apply {
@@ -386,12 +387,13 @@ class MainActivity : Activity() {
             addView(wifiText)
 
             setOnFocusChangeListener { v, f ->
-                wifiBg.setColor(if (f) COLOR_SOFT_WHITE else 0x8020252D.toInt())
-                wifiText.setTextColor(if (f) 0xFF111418.toInt() else COLOR_SOFT_WHITE)
+                wifiBg.setColor(if (f) COLOR_SOFT_WHITE else 0x801B222D.toInt())
+                wifiBg.setStroke(dp(1), if (f) COLOR_SOFT_WHITE else 0x20FFFFFF)
+                wifiText.setTextColor(if (f) COLOR_TEXT_DARK else COLOR_SOFT_WHITE)
                 wifiIcon.dark = f
                 wifiIcon.invalidate()
-                v.animate().scaleX(if (f) 1.05f else 1f).scaleY(if (f) 1.05f else 1f)
-                    .setInterpolator(decel).setDuration(ms(150)).start()
+                v.animate().scaleX(if (f) 1.04f else 1f).scaleY(if (f) 1.04f else 1f)
+                    .setInterpolator(decel).setDuration(ms(180)).start()
                 if (f) transitionAmbient(COLOR_MUTED_BLUE)
             }
             setOnClickListener {
@@ -418,11 +420,13 @@ class MainActivity : Activity() {
             isClickable = true
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
 
-            setOnFocusChangeListener { _, hasFocus ->
+            setOnFocusChangeListener { v, hasFocus ->
                 if (hasFocus) {
                     selectTab(index, requestContentFocus = false)
                     transitionAmbient(COLOR_MUTED_BLUE)
                 }
+                v.animate().scaleX(if (hasFocus) 1.03f else 1f).scaleY(if (hasFocus) 1.03f else 1f)
+                    .setInterpolator(decel).setDuration(ms(180)).start()
             }
             setOnClickListener {
                 selectTab(index, requestContentFocus = true)
@@ -456,10 +460,10 @@ class MainActivity : Activity() {
                     cornerRadius = dp(20).toFloat()
                     setColor(COLOR_SOFT_WHITE)
                 }
-                tv.setTextColor(0xFF111418.toInt())
+                tv.setTextColor(COLOR_TEXT_DARK)
             } else {
                 tv.background = null
-                tv.setTextColor(COLOR_SOFT_WHITE)
+                tv.setTextColor(0xFFCBD5E1.toInt())
             }
         }
     }
@@ -582,26 +586,26 @@ class MainActivity : Activity() {
         // Cinematic Hero Header
         heroTitle = TextView(this).apply {
             text = "Favourites"
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 32f)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 30f)
             setTextColor(COLOR_SOFT_WHITE)
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         }
         heroSubtitle = TextView(this).apply {
             text = "Pinned Applications • Quick Access"
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
             setTextColor(COLOR_COOL_GRAY)
             setPadding(0, dp(4), 0, 0)
         }
         heroHint = TextView(this).apply {
             text = "Press OK to open • Hold for options"
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
-            setTextColor(0x88C3CAD3.toInt())
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+            setTextColor(0x80B4BFCD.toInt())
             setPadding(0, dp(6), 0, 0)
         }
 
         heroLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(48), dp(40), dp(48), 0)
+            setPadding(dp(48), dp(36), dp(48), 0)
             addView(heroTitle)
             addView(heroSubtitle)
             addView(heroHint)
@@ -614,7 +618,7 @@ class MainActivity : Activity() {
         val dockGap = dp(16)
         val dockCardW = (contentW - (DOCK_SLOT_COUNT - 1) * dockGap) / DOCK_SLOT_COUNT
         val dockCardH = (dockCardW * 10 / 16) // 16:10 landscape rectangle
-        val dockCardR = dp(12).toFloat()
+        val dockCardR = dp(14).toFloat()
 
         val dockRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -682,7 +686,7 @@ class MainActivity : Activity() {
         val gridGap = dp(14)
         val gridCardW = (contentW - (APPS_PER_ROW - 1) * gridGap) / APPS_PER_ROW
         val gridCardH = (gridCardW * 10 / 16)
-        val gridCardR = dp(10).toFloat()
+        val gridCardR = dp(11).toFloat()
 
         val rows = allAppsList.chunked(APPS_PER_ROW)
 
@@ -829,13 +833,15 @@ class MainActivity : Activity() {
         val r = dp(12).toFloat()
         val bg = GradientDrawable().apply {
             cornerRadius = r
-            setColor(0x8020252D.toInt()) // Smoky charcoal surface
+            setColor(0x801B222D.toInt()) // Frosted smoky charcoal surface
+            setStroke(dp(1), 0x1AFFFFFF) // Fine translucent border
+        }
+        val badgeBg = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(0x22FFFFFF)
         }
         val iconBadge = FrameLayout(this).apply {
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(0x28FFFFFF)
-            }
+            background = badgeBg
         }
         val glyph = GlyphView(this, glyphType)
         iconBadge.addView(glyph, FrameLayout.LayoutParams(dp(22), dp(22), Gravity.CENTER))
@@ -869,12 +875,14 @@ class MainActivity : Activity() {
             addView(textLayout, LinearLayout.LayoutParams(0, -2, 1f))
 
             setOnFocusChangeListener { v, f ->
-                bg.setColor(if (f) COLOR_SOFT_WHITE else 0x8020252D.toInt())
-                titleTv.setTextColor(if (f) 0xFF111418.toInt() else COLOR_SOFT_WHITE)
-                subTv.setTextColor(if (f) 0xFF555E68.toInt() else COLOR_COOL_GRAY)
+                bg.setColor(if (f) COLOR_SOFT_WHITE else 0x801B222D.toInt())
+                bg.setStroke(dp(1), if (f) COLOR_SOFT_WHITE else 0x1AFFFFFF)
+                badgeBg.setColor(if (f) 0x1C000000 else 0x22FFFFFF)
+                titleTv.setTextColor(if (f) COLOR_TEXT_DARK else COLOR_SOFT_WHITE)
+                subTv.setTextColor(if (f) 0xFF4E5866.toInt() else COLOR_COOL_GRAY)
                 glyph.dark = f
                 glyph.invalidate()
-                v.animate().scaleX(if (f) 1.04f else 1f).scaleY(if (f) 1.04f else 1f)
+                v.animate().scaleX(if (f) 1.03f else 1f).scaleY(if (f) 1.03f else 1f)
                     .setInterpolator(decel).setDuration(ms(180)).start()
                 if (f) transitionAmbient(COLOR_MUTED_BLUE)
             }
@@ -886,7 +894,8 @@ class MainActivity : Activity() {
         val r = dp(12).toFloat()
         val bg = GradientDrawable().apply {
             cornerRadius = r
-            setColor(0x8020252D.toInt())
+            setColor(0x801B222D.toInt())
+            setStroke(dp(1), 0x1AFFFFFF)
         }
         val glyph = GlyphView(this, GlyphView.TYPE_SLIDERS)
         val titleTv = TextView(this).apply {
@@ -924,13 +933,14 @@ class MainActivity : Activity() {
             addView(chevron)
 
             setOnFocusChangeListener { v, f ->
-                bg.setColor(if (f) COLOR_SOFT_WHITE else 0x8020252D.toInt())
-                titleTv.setTextColor(if (f) 0xFF111418.toInt() else COLOR_SOFT_WHITE)
-                subTv.setTextColor(if (f) 0xFF555E68.toInt() else COLOR_COOL_GRAY)
-                chevron.setTextColor(if (f) 0xFF111418.toInt() else COLOR_COOL_GRAY)
+                bg.setColor(if (f) COLOR_SOFT_WHITE else 0x801B222D.toInt())
+                bg.setStroke(dp(1), if (f) COLOR_SOFT_WHITE else 0x1AFFFFFF)
+                titleTv.setTextColor(if (f) COLOR_TEXT_DARK else COLOR_SOFT_WHITE)
+                subTv.setTextColor(if (f) 0xFF4E5866.toInt() else COLOR_COOL_GRAY)
+                chevron.setTextColor(if (f) COLOR_TEXT_DARK else COLOR_COOL_GRAY)
                 glyph.dark = f
                 glyph.invalidate()
-                v.animate().scaleX(if (f) 1.03f else 1f).scaleY(if (f) 1.03f else 1f)
+                v.animate().scaleX(if (f) 1.025f else 1f).scaleY(if (f) 1.025f else 1f)
                     .setInterpolator(decel).setDuration(ms(180)).start()
                 if (f) transitionAmbient(COLOR_MUTED_BLUE)
             }
@@ -997,10 +1007,10 @@ class MainActivity : Activity() {
             addView(img, LinearLayout.LayoutParams(cardW, cardH))
             addView(label, LinearLayout.LayoutParams(cardW, -2))
 
-            // Focused state: Scale 1.06x, thin soft-white outline, smooth 240ms transition
+            // Focused state: Restrained 1.05x elevation, crisp soft-white focus ring, 180ms transition
             setOnFocusChangeListener { v, f ->
-                val s = if (f) 1.06f else 1.0f
-                val shadowZ = if (f) dp(18).toFloat() else 0f
+                val s = if (f) (if (isDock) 1.05f else 1.04f) else 1.0f
+                val shadowZ = if (f) dp(12).toFloat() else 0f
                 border.setStroke(dp(1.8f), if (f) COLOR_SOFT_WHITE else Color.TRANSPARENT)
                 label.setTextColor(if (f) COLOR_SOFT_WHITE else COLOR_COOL_GRAY)
 
@@ -1009,7 +1019,7 @@ class MainActivity : Activity() {
                     .scaleY(s)
                     .translationZ(shadowZ)
                     .setInterpolator(decel)
-                    .setDuration(ms(240))
+                    .setDuration(ms(180))
                     .withLayer()
                     .start()
 
@@ -1114,32 +1124,32 @@ class MainActivity : Activity() {
             banner.draw(c)
         } else {
             // Rich multi-stop gradient background tinted with the brand color
-            val topColor = blendColor(dominantColor, 0xFF354462.toInt(), 0.45f)
-            val midColor = blendColor(dominantColor, 0xFF1C2436.toInt(), 0.70f)
+            val topColor = blendColor(dominantColor, 0xFF2A374C.toInt(), 0.35f)
+            val midColor = blendColor(dominantColor, 0xFF141C2A.toInt(), 0.65f)
             val bottomColor = blendColor(dominantColor, COLOR_MIDNIGHT_BLACK, 0.88f)
 
             val p = Paint().apply {
-                shader = LinearGradient(0f, 0f, 0f, h.toFloat(), intArrayOf(topColor, midColor, bottomColor), null, Shader.TileMode.CLAMP)
+                shader = LinearGradient(0f, 0f, 0f, h.toFloat(), intArrayOf(topColor, midColor, bottomColor), floatArrayOf(0f, 0.55f, 1f), Shader.TileMode.CLAMP)
             }
             c.drawRect(0f, 0f, w.toFloat(), h.toFloat(), p)
 
             // Top specular glass sheen
             val sheen = Paint().apply {
-                shader = LinearGradient(0f, 0f, 0f, h * 0.45f, 0x30FFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP)
+                shader = LinearGradient(0f, 0f, 0f, h * 0.42f, 0x22FFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP)
             }
-            c.drawRect(0f, 0f, w.toFloat(), h * 0.45f, sheen)
+            c.drawRect(0f, 0f, w.toFloat(), h * 0.42f, sheen)
 
-            // Subtle inner rim
+            // Subtle inner rim stroke
             val rim = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 style = Paint.Style.STROKE
-                strokeWidth = 1.5f
-                color = 0x24FFFFFF
+                strokeWidth = 1.2f
+                color = 0x1EFFFFFF
             }
             c.drawRoundRect(RectF(1f, 1f, w - 1f, h - 1f), r, r, rim)
 
-            // Centered app icon with prominent 60% height presence
+            // Centered app icon with prominent 58% height presence
             val icon = ri.loadIcon(pm)
-            val iconSize = (h * 0.60f).toInt()
+            val iconSize = (h * 0.58f).toInt()
             val left = (w - iconSize) / 2
             val top = (h - iconSize) / 2
             icon.setBounds(left, top, left + iconSize, top + iconSize)
@@ -1164,7 +1174,7 @@ class MainActivity : Activity() {
         ambientAnim?.cancel()
         val from = if (currentAmbient == Color.TRANSPARENT) 0x00000000 else currentAmbient
         ambientAnim = ValueAnimator.ofObject(ArgbEvaluator(), from, color).apply {
-            duration = 300 // 200–350ms restrained transition
+            duration = ms(200) // 180–220ms restrained transition
             interpolator = decel
             addUpdateListener { va ->
                 currentAmbient = va.animatedValue as Int

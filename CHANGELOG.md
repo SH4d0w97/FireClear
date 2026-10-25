@@ -1,5 +1,15 @@
 # Changelog
 
+## 5.1.0 - 2026-10-26
+- **tvOS-Inspired Visual Polish & Adaptive Launcher Icon**:
+  - **Official Adaptive & Legacy App Icons**: Integrated 432x432 foreground flame layer (ic_launcher_foreground.png), dark solid background layer (ic_launcher_background.png), API 26+ <adaptive-icon> XML definition, and pre-Oreo multi-density mipmaps (mdpi through xxxhdpi).
+  - **Deep Midnight-Navy Atmosphere**: Refined background palettes and contrast gradient overlays (#080C14 / #070A10 to #191D3A) for a quiet, cinematic foundation that lets app artwork shine.
+  - **Fluid 180ms Focus Transitions**: Calibrated focus animations across tiles, navigation tabs, Wi-Fi pill, and settings cards to ~180ms with DecelerateInterpolator(1.8f) for responsive 60 FPS motion without jitter.
+  - **Restrained Elevation & Focus Geometry**: Tuned tile focus scale to 1.05x (dock) and 1.04x (grid) with crisp 1.8dp soft-white focus rings, 14dp/11dp corner radii, and 12dp elevation shadows.
+  - **Refined Card Material**: Multi-stop brand-tinted gradient backing, top specular glass sheen, and 1.2dp translucent inner rim stroke with 58% icon scale.
+  - **High-Contrast Settings Cards**: Added subtle borders, frosted circular glyph insets, and high-contrast soft-white active focus states across all 6 quick setting tiles and the All Settings gateway.
+  - **Strict Security & Zero Dependencies**: 100% passed static security guardrails (scripts/audit.sh), zero external dependencies, and minimal network permission footprint.
+
 ## 5.0.0 - 2026-10-25
 - Automated major release bump from 4.0.1 (versionCode 13) to 5.0.0 (versionCode 14).
 

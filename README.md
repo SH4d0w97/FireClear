@@ -50,7 +50,7 @@ Modern streaming devices are increasingly overwhelmed by sponsored autoplay vide
 - **Adaptive Ambient Glow:** A soft, low-opacity radial gradient near the bottom dock smoothly blooms with the focused app's signature brand color (e.g., ruby for YouTube, emerald for Spotify, sapphire for Prime Video).
 - **All Applications View:** A dedicated 5-column grid for all installed applications with custom brand-tinted cards, top specular sheens, and inner glass rims.
 - **Quick Settings Hub:** Streamlined 2×3 control center tiles (*Wi-Fi*, *Bluetooth*, *Wallpaper*, *Sound*, *Display*, *Network*) plus a full-width *All Settings* gateway with high-contrast active states.
-- **Restrained Focus Physics:** Focused tiles scale slightly (1.06×), project a clean soft-white outline, and cast subtle depth shadows with a smooth 240ms transition.
+- **Restrained Focus Physics:** Focused tiles scale slightly (1.05× dock, 1.04× grid), project a clean soft-white outline, and cast subtle depth shadows with a smooth 180ms transition.
 
 ---
 

@@ -8,6 +8,9 @@
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <application
         android:label="FireClear"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:banner="@mipmap/ic_launcher"
         android:allowBackup="false"
         android:usesCleartextTraffic="false"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen">
