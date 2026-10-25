@@ -4,7 +4,7 @@
 
 **An ad-free, tvOS-style home screen and a one-menu cleaner for Fire TV Stick**
 
-[![build](https://github.com/YOUR_USER/fireclear/actions/workflows/build.yml/badge.svg)](https://github.com/YOUR_USER/fireclear/actions/workflows/build.yml)
+[![build](https://github.com/SH4d0w97/fireclear/actions/workflows/build.yml/badge.svg)](https://github.com/SH4d0w97/fireclear/actions/workflows/build.yml)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 ![Fire OS](https://img.shields.io/badge/Fire%20OS-7-orange)
 ![internet permission](https://img.shields.io/badge/internet%20permission-none-brightgreen)
@@ -14,7 +14,7 @@
 
 </div>
 
-> Replace `YOUR_USER` in the badge links above with your GitHub username after you publish.
+> Replace `SH4d0w97` in the badge links above with your GitHub username after you publish.
 
 ## Why FireClear
 
