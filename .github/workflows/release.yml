@@ -1,5 +1,5 @@
 name: release
-# Push a tag like v2.1 to publish a GitHub Release with the APK + SHA-256.
+# Push a tag like v2.3 to publish a GitHub Release with the APK + SHA-256.
 # Optional stable signing: add repo secrets FIRECLEAR_KEYSTORE_B64, FIRECLEAR_KS_PASS,
 # FIRECLEAR_KEY_ALIAS, FIRECLEAR_KEY_PASS. Without them the APK is debug-signed.
 on:
@@ -11,15 +11,13 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
       - run: bash scripts/audit.sh
-      - uses: actions/setup-java@v6
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-      - uses: gradle/actions/setup-gradle@v6
-        with:
-          gradle-version: '8.7'
+      - uses: gradle/actions/setup-gradle@v4
       - name: Decode keystore (only if secrets exist)
         env:
           KS_B64: ${{ secrets.FIRECLEAR_KEYSTORE_B64 }}
@@ -35,10 +33,10 @@ jobs:
           FIRECLEAR_KEY_PASS: ${{ secrets.FIRECLEAR_KEY_PASS }}
         run: |
           if [ -n "${FIRECLEAR_KEYSTORE:-}" ]; then
-            gradle --no-daemon assembleRelease
+            ./gradlew --no-daemon assembleRelease
             cp app/build/outputs/apk/release/app-release.apk "FireClear-${GITHUB_REF_NAME}.apk"
           else
-            gradle --no-daemon assembleDebug
+            ./gradlew --no-daemon assembleDebug
             cp app/build/outputs/apk/debug/app-debug.apk "FireClear-${GITHUB_REF_NAME}.apk"
           fi
       - name: Verify built APK

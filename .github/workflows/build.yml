@@ -10,20 +10,18 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
       - name: Static security audit
         run: bash scripts/audit.sh
-      - uses: actions/setup-java@v6
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-      - uses: gradle/actions/setup-gradle@v6
-        with:
-          gradle-version: '9.6.0'
+      - uses: gradle/actions/setup-gradle@v4
       - name: Android lint
-        run: gradle --no-daemon lintDebug
+        run: ./gradlew --no-daemon lintDebug
       - name: Build debug APK
-        run: gradle --no-daemon assembleDebug
+        run: ./gradlew --no-daemon assembleDebug
       - name: Verify permissions of the built APK
         run: bash scripts/verify-apk.sh app/build/outputs/apk/debug/app-debug.apk
       - name: Checksum
@@ -31,7 +29,7 @@ jobs:
           cd app/build/outputs/apk/debug
           cp app-debug.apk FireClear-debug.apk
           sha256sum FireClear-debug.apk | tee SHA256SUMS.txt
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v4
         with:
           name: FireClear-debug-apk
           path: |
