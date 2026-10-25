@@ -39,7 +39,6 @@ import android.view.ViewOutlineProvider
 import android.view.ViewTreeObserver
 import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
-import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -56,12 +55,10 @@ private const val MAX_WALLPAPER_BYTES = 25L * 1024 * 1024
 /** Constant count of apps in the top favorites dock. */
 private const val DOCK_SLOT_COUNT = 4
 
-/** Scroll views that never jump on focus: MainActivity glides them smoothly. */
-private class CalmHScroll(c: Context) : HorizontalScrollView(c) {
-    init { overScrollMode = View.OVER_SCROLL_NEVER }
-    override fun computeScrollDeltaToGetChildRectOnScreen(rect: Rect?): Int = 0
-}
+/** Apps per row in the grid below the dock. */
+private const val APPS_PER_ROW = 5
 
+/** Smooth vertical scroll view that never jumps on focus: MainActivity glides smoothly. */
 private class CalmVScroll(c: Context) : ScrollView(c) {
     init { overScrollMode = View.OVER_SCROLL_NEVER }
     override fun computeScrollDeltaToGetChildRectOnScreen(rect: Rect?): Int = 0
@@ -69,9 +66,7 @@ private class CalmVScroll(c: Context) : ScrollView(c) {
 
 class MainActivity : Activity() {
 
-    private class Sec(val id: String, val header: View?, val hs: HorizontalScrollView?, val row: LinearLayout) {
-        var anim: ObjectAnimator? = null
-    }
+    private class Sec(val id: String, val header: View?, val row: LinearLayout)
 
     private val ui = Handler(Looper.getMainLooper())
     private val worker = Executors.newSingleThreadExecutor()
@@ -113,7 +108,7 @@ class MainActivity : Activity() {
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
     private fun ms(v: Long) = if (reduce) 0L else v
 
-    // ───────────────────────── lifecycle ─────────────────────────
+    // ───────────────────────── Lifecycle ─────────────────────────
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -127,7 +122,7 @@ class MainActivity : Activity() {
 
         val page = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; clipChildren = false }
 
-        // tvOS-style sleek top header: clock, date, and status pills
+        // Apple tvOS-style clean status bar: clock & date on left, pills on right
         val timeV = TextClock(this).apply {
             format12Hour = "h:mm"; format24Hour = "HH:mm"
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 36f)
@@ -146,7 +141,7 @@ class MainActivity : Activity() {
         val bar = LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL
             clipChildren = false
-            setPadding(dp(56), dp(24), dp(56), dp(8))
+            setPadding(dp(56), dp(26), dp(56), dp(6))
         }
         bar.addView(left, LinearLayout.LayoutParams(0, -2, 1f))
         wifiIcon = WifiView(this)
@@ -159,7 +154,7 @@ class MainActivity : Activity() {
         content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             clipChildren = false
-            setPadding(0, dp(4), 0, dp(64))
+            setPadding(0, 0, 0, dp(80))
         }
         scroll = CalmVScroll(this).apply {
             isVerticalScrollBarEnabled = false
@@ -204,7 +199,7 @@ class MainActivity : Activity() {
     @Deprecated("Home screen: Back does nothing")
     override fun onBackPressed() {}
 
-    // ───────────────────────── data & dock ─────────────────────────
+    // ───────────────────────── Data & Dock ─────────────────────────
 
     private fun loadApps(): List<ResolveInfo> {
         val pm = packageManager
@@ -222,7 +217,7 @@ class MainActivity : Activity() {
         prefs.edit().putString(k, l.joinToString("\n")).apply()
     }
 
-    /** Returns the 4 packages assigned to the dock, auto-filling remaining slots if needed. */
+    /** Returns exactly the 4 packages assigned to the dock, auto-filling remaining slots if needed. */
     private fun getDockPackages(all: List<ResolveInfo>): List<String> {
         val hidden = prefs.getStringSet("hidden", emptySet<String>()) ?: emptySet()
         val byPkg = all.associateBy { it.activityInfo.packageName }
@@ -257,19 +252,18 @@ class MainActivity : Activity() {
 
         val dockPkgs = getDockPackages(all)
         val dockApps = dockPkgs.mapNotNull { byPkg[it] }
-
         val otherApps = all.filter { it.activityInfo.packageName !in hidden && it.activityInfo.packageName !in dockPkgs }
 
         signature = currentSig(appSig)
         content.removeAllViews()
         sections.clear()
 
-        // 1. APPLE TV-STYLE 4-APP FAVORITES DOCK
+        // 1. APPLE TV-STYLE TOP SHELF FAVORITES DOCK (With generous breathing space from clock)
         addDockSection(dockApps, byPkg)
 
-        // 2. APPS ROWS BELOW THE DOCK
+        // 2. APPS GRID BELOW (Multi-row grid, revealed on scrolling down)
         if (otherApps.isNotEmpty()) {
-            addAppsSection("all", "APPS", otherApps)
+            addMultiRowAppsSection("APPS", otherApps)
         }
 
         content.viewTreeObserver.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
@@ -298,17 +292,27 @@ class MainActivity : Activity() {
         return out
     }
 
-    /** Apple tvOS 4-App Favorites Dock with translucent glass shelf pedestal. */
+    /** Apple tvOS 4-App Favorites Dock centered on a frosted glass shelf pedestal. */
     private fun addDockSection(dockApps: List<ResolveInfo>, byPkg: Map<String, ResolveInfo>) {
+        val dockWrapper = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            clipChildren = false
+            clipToPadding = false
+            // Generous breathing space between top bar and dock (phone / tvOS style)
+            setPadding(0, dp(64), 0, dp(140))
+        }
+
         val head = TextView(this).apply {
             text = "FAVORITES"
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-            setTextColor(0x99FFFFFF.toInt())
-            letterSpacing = 0.16f
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            setTextColor(0x88FFFFFF.toInt())
+            letterSpacing = 0.18f
+            gravity = Gravity.CENTER
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            setPadding(dp(56), dp(16), 0, dp(8))
+            setPadding(0, 0, 0, dp(12))
         }
-        content.addView(head)
+        dockWrapper.addView(head)
 
         val dockRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -317,30 +321,24 @@ class MainActivity : Activity() {
             clipToPadding = false
         }
 
-        // Translucent glass shelf background
+        // Translucent glass shelf pedestal
         val shelf = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
             clipChildren = false
             clipToPadding = false
-            setPadding(dp(22), dp(14), dp(22), dp(18))
+            setPadding(dp(18), dp(12), dp(18), dp(14))
             background = GradientDrawable().apply {
-                cornerRadius = dp(26).toFloat()
-                setColor(0x1AFFFFFF)
+                cornerRadius = dp(22).toFloat()
+                setColor(0x18FFFFFF)
                 setStroke(dp(1), 0x22FFFFFF.toInt())
             }
             addView(dockRow)
         }
+        dockWrapper.addView(shelf)
+        content.addView(dockWrapper)
 
-        val shelfContainer = FrameLayout(this).apply {
-            clipChildren = false
-            clipToPadding = false
-            setPadding(dp(56), dp(4), dp(56), dp(20))
-            addView(shelf, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER_HORIZONTAL))
-        }
-        content.addView(shelfContainer)
-
-        val sec = Sec("dock", head, null, dockRow)
+        val sec = Sec("dock", head, dockRow)
         sections.add(sec)
 
         dockApps.forEachIndexed { slot, ri ->
@@ -348,39 +346,41 @@ class MainActivity : Activity() {
         }
     }
 
-    /** Smooth horizontally scrolling row for remaining apps. */
-    private fun addAppsSection(id: String, title: String, apps: List<ResolveInfo>) {
+    /** Multi-row Apps grid below the fold (5 apps per row, centered). */
+    private fun addMultiRowAppsSection(title: String, apps: List<ResolveInfo>) {
         val head = TextView(this).apply {
             text = title
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-            setTextColor(0x99FFFFFF.toInt())
-            letterSpacing = 0.14f
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            setTextColor(0x88FFFFFF.toInt())
+            letterSpacing = 0.16f
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            setPadding(dp(56), dp(18), 0, dp(4))
+            setPadding(dp(72), dp(8), 0, dp(12))
         }
         content.addView(head)
 
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            clipChildren = false
-            clipToPadding = false
-        }
-        val hs = CalmHScroll(this).apply {
-            isHorizontalScrollBarEnabled = false
-            clipToPadding = false
-            clipChildren = false
-            setPadding(dp(46), dp(16), dp(46), dp(24))
-            addView(row)
-        }
-        content.addView(hs)
-        val sec = Sec(id, head, hs, row)
-        sections.add(sec)
-
         val byPkg = apps.associateBy { it.activityInfo.packageName }
-        apps.forEach { row.addView(appTile(it, sec, big = false, isDock = false, dockSlot = -1, byPkg = byPkg)) }
+        val rows = apps.chunked(APPS_PER_ROW)
+
+        rows.forEachIndexed { rowIndex, rowApps ->
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_HORIZONTAL
+                clipChildren = false
+                clipToPadding = false
+                setPadding(dp(48), dp(6), dp(48), dp(16))
+            }
+            content.addView(row)
+
+            val sec = Sec("app_row_$rowIndex", if (rowIndex == 0) head else null, row)
+            sections.add(sec)
+
+            rowApps.forEach { ri ->
+                row.addView(appTile(ri, sec, big = false, isDock = false, dockSlot = -1, byPkg = byPkg))
+            }
+        }
     }
 
-    // ───────────────────────── Tiles & tvOS Animations ─────────────────────────
+    // ───────────────────────── Tiles & Focus Animations ─────────────────────────
 
     private fun appTile(
         ri: ResolveInfo,
@@ -413,9 +413,10 @@ class MainActivity : Activity() {
         click: () -> Unit,
         long: (() -> Unit)?
     ): View {
-        val w = dp(if (big) 230 else 180)
-        val h = dp(if (big) 130 else 101)
-        val r = dp(if (big) 16 else 13).toFloat()
+        // Compact, refined card proportions for premium tvOS feel
+        val w = dp(if (big) 196 else 148)
+        val h = dp(if (big) 110 else 84)
+        val r = dp(if (big) 14 else 11).toFloat()
         val key = sec.id + "|" + id
         val artKey = id + "|" + w
 
@@ -427,7 +428,7 @@ class MainActivity : Activity() {
 
         val img = ImageView(this).apply {
             scaleType = ImageView.ScaleType.FIT_XY
-            background = GradientDrawable().apply { setColor(0xFF1E2640.toInt()); cornerRadius = r }
+            background = GradientDrawable().apply { setColor(0xFF1B2238.toInt()); cornerRadius = r }
             foreground = border
             tag = artKey
             outlineProvider = object : ViewOutlineProvider() {
@@ -438,13 +439,13 @@ class MainActivity : Activity() {
 
         val label = TextView(this).apply {
             text = name
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, if (big) 13f else 12f)
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
             alpha = 0f
-            setPadding(0, dp(14), 0, 0)
+            setPadding(0, dp(8), 0, 0)
         }
 
         return LinearLayout(this).apply {
@@ -458,16 +459,16 @@ class MainActivity : Activity() {
             addView(img, LinearLayout.LayoutParams(w, h))
             addView(label, LinearLayout.LayoutParams(w, -2))
             layoutParams = LinearLayout.LayoutParams(-2, -2).apply {
-                setMargins(dp(if (big) 12 else 10), 0, dp(if (big) 12 else 10), 0)
+                setMargins(dp(if (big) 10 else 8), 0, dp(if (big) 10 else 8), 0)
             }
 
-            // Apple tvOS focus animation: lift, scale, glow ring, dynamic shadow, and smooth label fade
+            // Apple tvOS focus animation: lift, scale, glowing ring, soft elevation shadow, and label fade
             setOnFocusChangeListener { v, f ->
                 val s = if (f) (if (big) 1.12f else 1.15f) else 1.0f
-                val lift = if (f) -dp(8).toFloat() else 0f
-                val shadowZ = if (f) dp(28).toFloat() else 0f
+                val lift = if (f) -dp(6).toFloat() else 0f
+                val shadowZ = if (f) dp(24).toFloat() else 0f
 
-                border.setStroke(dp(3), if (f) 0xF2FFFFFF.toInt() else Color.TRANSPARENT)
+                border.setStroke(dp(3), if (f) 0xF5FFFFFF.toInt() else Color.TRANSPARENT)
 
                 img.animate()
                     .scaleX(s)
@@ -522,16 +523,16 @@ class MainActivity : Activity() {
         val c = Canvas(src)
         val banner = ri.activityInfo.loadBanner(pm)
         if (banner != null) {
-            c.drawColor(0xFF1E2640.toInt())
+            c.drawColor(0xFF1B2238.toInt())
             banner.setBounds(0, 0, w, h)
             banner.draw(c)
         } else {
             val p = Paint().apply {
-                shader = LinearGradient(0f, 0f, 0f, h.toFloat(), 0xFF2E3965.toInt(), 0xFF171D3A.toInt(), Shader.TileMode.CLAMP)
+                shader = LinearGradient(0f, 0f, 0f, h.toFloat(), 0xFF2A345C.toInt(), 0xFF141933.toInt(), Shader.TileMode.CLAMP)
             }
             c.drawRect(0f, 0f, w.toFloat(), h.toFloat(), p)
             val icon = ri.loadIcon(pm)
-            val s = (h * 0.58f).toInt()
+            val s = (h * 0.54f).toInt()
             val l = (w - s) / 2
             val t = (h - s) / 2
             icon.setBounds(l, t, l + s, t + s)
@@ -553,22 +554,14 @@ class MainActivity : Activity() {
     // ───────────────────────── Smooth Scrolling ─────────────────────────
 
     private fun onTileFocused(tile: View, sec: Sec) {
-        val hs = sec.hs
-        if (hs != null) {
-            val maxX = maxOf(0, sec.row.right + hs.paddingRight - hs.width)
-            val wantX = (sec.row.left + tile.left + tile.width / 2 - hs.width / 2).coerceIn(0, maxX)
-            sec.anim?.cancel()
-            if (restoring) hs.scrollTo(wantX, 0)
-            else if (hs.scrollX != wantX) {
-                sec.anim = ObjectAnimator.ofInt(hs, "scrollX", hs.scrollX, wantX).apply {
-                    duration = ms(240); interpolator = decel; start()
-                }
-            }
-        }
-
-        val headerTop = sec.header?.top ?: 0
         val maxY = maxOf(0, content.height - scroll.height)
-        glideY(if (sections.firstOrNull() === sec) 0 else (headerTop - dp(8)).coerceIn(0, maxY))
+        // In the dock: stay at the pristine top of the home screen (scrollY = 0).
+        // In app rows: smoothly glide down to center the active row on screen.
+        val wantY = if (sec.id == "dock") 0 else {
+            val rowTop = sec.row.top
+            (rowTop - dp(100)).coerceIn(0, maxY)
+        }
+        glideY(wantY)
     }
 
     private fun glideY(wantY: Int) {
@@ -576,7 +569,7 @@ class MainActivity : Activity() {
         if (restoring) scroll.scrollTo(0, wantY)
         else if (scroll.scrollY != wantY) {
             vAnim = ObjectAnimator.ofInt(scroll, "scrollY", scroll.scrollY, wantY).apply {
-                duration = ms(280); interpolator = decel; start()
+                duration = ms(300); interpolator = decel; start()
             }
         }
     }
@@ -789,17 +782,17 @@ class MainActivity : Activity() {
         val bg = GradientDrawable().apply { cornerRadius = dp(30).toFloat(); setColor(0x33FFFFFF) }
         val label = TextView(this).apply {
             this.text = text
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
             setTextColor(Color.WHITE)
         }
         return LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(18), dp(8), dp(20), dp(8))
+            setPadding(dp(16), dp(8), dp(18), dp(8))
             background = bg
             isFocusable = true
             isClickable = true
-            if (icon != null) addView(icon, LinearLayout.LayoutParams(dp(24), dp(18)).apply { rightMargin = dp(8) })
+            if (icon != null) addView(icon, LinearLayout.LayoutParams(dp(22), dp(16)).apply { rightMargin = dp(8) })
             addView(label)
             setOnFocusChangeListener { v, f ->
                 bg.setColor(if (f) 0xF2FFFFFF.toInt() else 0x33FFFFFF)

@@ -33,14 +33,19 @@ Amazon's Fire TV home screen is full of autoplay video ads, banners, and backgro
  9:41                              [ Wi-Fi ]  [ Customize ]  [ Settings ]
  Sunday, 25 October
 
+ (Generous breathing room)
+
  FAVORITES (DOCK)
  ┌──────────────────────────────────────────────────────────────┐
- │  [ YouTube ]   [[ Prime Video ]]   [ Plex ]   [ Netflix ]    │  ← 4-App Dock Shelf
+ │  [ YouTube ]   [[ Prime Video ]]   [ Plex ]   [ Netflix ]    │  ← Centered 4-App Dock
  └──────────────────────────────────────────────────────────────┘
                      Prime Video (lifts, scales & glows)
 
+                     ↓  (Scroll down to reveal installed apps)
+
  APPS
- [ Kodi ]  [ Downloader ]  [ Photos ]  [ Browser ]  [ Files ]  ...
+ [ Kodi ]     [ Downloader ] [ Photos ]   [ Browser ]    [ Files ]
+ [ Appstore ] [ Calendar ]   [ Weather ]  [ Music ]      [ Games ]
 ```
 
 No libraries. No network. No background services. Zero dependencies.
