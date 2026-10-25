@@ -1,5 +1,8 @@
 # Changelog
 
+## 2.3.3 - 2026-10-25
+- Automated patch release bump from 2.3.2 (versionCode 7) to 2.3.3 (versionCode 8).
+
 ## 2.3.2 - 2026-10-25
 - Automated patch release bump from 2.3.1 (versionCode 6) to 2.3.2 (versionCode 7).
 
