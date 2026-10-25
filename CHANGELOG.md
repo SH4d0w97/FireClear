@@ -1,5 +1,8 @@
 # Changelog
 
+## 3.0.2 - 2026-10-25
+- Automated patch release bump from 3.0.1 (versionCode 10) to 3.0.2 (versionCode 11).
+
 ## 3.0.1 - 2026-10-25
 - Automated patch release bump from 3.0.0 (versionCode 9) to 3.0.1 (versionCode 10).
 
