@@ -1,6 +1,8 @@
 package app.fireclear.launcher
 
+import android.animation.ArgbEvaluator
 import android.animation.ObjectAnimator
+import android.animation.ValueAnimator
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.ComponentName
@@ -64,27 +66,64 @@ private class CalmVScroll(c: Context) : ScrollView(c) {
     override fun computeScrollDeltaToGetChildRectOnScreen(rect: Rect?): Int = 0
 }
 
+/**
+ * Dynamic ambient illumination view that renders Apple tvOS-style fluid backlight bloom
+ * reflecting the focused app's dominant signature color with zero allocations during animation.
+ */
+private class AmbientBloomView(c: Context) : View(c) {
+    var ambientColor: Int = Color.TRANSPARENT
+        set(v) {
+            if (field != v) {
+                field = v
+                invalidate()
+            }
+        }
+    private val p = Paint(Paint.ANTI_ALIAS_FLAG)
+
+    override fun onDraw(cv: Canvas) {
+        if (ambientColor == Color.TRANSPARENT || Color.alpha(ambientColor) == 0) return
+        val w = width.toFloat()
+        val h = height.toFloat()
+        val cr = Color.red(ambientColor)
+        val cg = Color.green(ambientColor)
+        val cb = Color.blue(ambientColor)
+        p.shader = RadialGradient(
+            w * 0.5f, h * 0.52f, w * 0.68f,
+            intArrayOf(Color.argb(92, cr, cg, cb), Color.argb(38, cr, cg, cb), Color.TRANSPARENT),
+            floatArrayOf(0f, 0.46f, 1f),
+            Shader.TileMode.CLAMP
+        )
+        cv.drawRect(0f, 0f, w, h, p)
+    }
+}
+
 class MainActivity : Activity() {
 
     private class Sec(val id: String, val header: View?, val row: LinearLayout)
 
     private val ui = Handler(Looper.getMainLooper())
     private val worker = Executors.newSingleThreadExecutor()
-    private val decel = DecelerateInterpolator(1.8f)
+    private val decel = DecelerateInterpolator(2.0f)
 
     // Art is rendered once at exact tile size, then cached. 12 MB cap keeps RAM minimal.
     private val cache = object : LruCache<String, Bitmap>(12 * 1024 * 1024) {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
     }
 
+    private val colorMap = HashMap<String, Int>()
+
     private lateinit var prefs: SharedPreferences
     private lateinit var wallpaper: ImageView
+    private lateinit var ambientGlow: AmbientBloomView
     private lateinit var content: LinearLayout
     private lateinit var scroll: ScrollView
     private lateinit var wifiIcon: WifiView
     private lateinit var wifiText: TextView
     private val sections = ArrayList<Sec>()
     private var vAnim: ObjectAnimator? = null
+    private var ambientAnim: ValueAnimator? = null
+    private var currentAmbient = Color.TRANSPARENT
+    private var targetAmbient = Color.TRANSPARENT
     private var lastKey = ""
     private var signature = ""
     private var appSig = ""
@@ -120,6 +159,9 @@ class MainActivity : Activity() {
         val root = FrameLayout(this)
         wallpaper = ImageView(this).apply { scaleType = ImageView.ScaleType.FIT_XY }
         root.addView(wallpaper, FrameLayout.LayoutParams(-1, -1))
+
+        ambientGlow = AmbientBloomView(this)
+        root.addView(ambientGlow, FrameLayout.LayoutParams(-1, -1))
 
         val page = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; clipChildren = false }
 
@@ -166,6 +208,7 @@ class MainActivity : Activity() {
 
         content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
             clipChildren = false
             clipToPadding = false
             setPadding(0, 0, 0, dp(80))
@@ -254,7 +297,7 @@ class MainActivity : Activity() {
     private fun refresh() {
         val all = loadApps()
         val aSig = all.joinToString(",") { it.activityInfo.packageName }
-        if (aSig != appSig) { appSig = aSig; cache.evictAll() }
+        if (aSig != appSig) { appSig = aSig; cache.evictAll(); colorMap.clear() }
         if (currentSig(aSig) != signature) rebuild(all)
     }
 
@@ -272,14 +315,63 @@ class MainActivity : Activity() {
         content.removeAllViews()
         sections.clear()
 
+        // ───────────────── Fully Screen-Adaptive Dimensions ─────────────────
+        val dm = resources.displayMetrics
+        val screenW = dm.widthPixels
+        val screenH = dm.heightPixels
+
+        // Active layout container spans 84% of display width (symmetrically centered with 8% side margins)
+        val contentW = (screenW * 0.84f).toInt()
+
+        // 1. Dock shelf & 4-card calculations
+        val dockGap = dp(14)
+        val shelfPadH = dp(18)
+        val shelfPadV = dp(14)
+        val dockCardW = (contentW - (2 * shelfPadH) - (DOCK_SLOT_COUNT - 1) * dockGap) / DOCK_SLOT_COUNT
+        val dockCardH = (dockCardW * 9 / 16)
+        val dockCardR = dockCardH * 0.16f
+        val shelfR = dockCardH * 0.22f
+
+        // 2. Multi-row grid calculations (5 cards per row)
+        val gridGap = dp(14)
+        val gridCardW = (contentW - (APPS_PER_ROW - 1) * gridGap) / APPS_PER_ROW
+        val gridCardH = (gridCardW * 9 / 16)
+        val gridCardR = gridCardH * 0.16f
+
+        // 3. Viewport & below-the-fold peek calculation
+        val topBarH = dp(56)
+        val availableH = screenH - topBarH
+        val peekH = (gridCardH * 0.36f).toInt()
+        val targetWrapperH = availableH - peekH
+        val shelfH = dockCardH + (2 * shelfPadV)
+        val topSpace = maxOf(dp(50), targetWrapperH - shelfH - dp(26))
+
         // 1. APPLE TV-STYLE TOP SHELF FAVORITES DOCK
-        // Positioned in the lower screen with generous cinematic negative space above,
-        // and measured so the tops of the next row of apps peek through from below the fold.
-        addDockSection(dockApps, byPkg, hasAppsBelow = otherApps.isNotEmpty())
+        addDockSection(
+            dockApps = dockApps,
+            byPkg = byPkg,
+            hasAppsBelow = otherApps.isNotEmpty(),
+            targetWrapperH = targetWrapperH,
+            topSpace = topSpace,
+            shelfPadH = shelfPadH,
+            shelfPadV = shelfPadV,
+            shelfR = shelfR,
+            cardW = dockCardW,
+            cardH = dockCardH,
+            cardR = dockCardR,
+            cardGap = dockGap
+        )
 
         // 2. APPS GRID BELOW (Multi-row grid, revealed on scrolling down)
         if (otherApps.isNotEmpty()) {
-            addMultiRowAppsSection(otherApps)
+            addMultiRowAppsSection(
+                apps = otherApps,
+                cardW = gridCardW,
+                cardH = gridCardH,
+                cardR = gridCardR,
+                cardGap = gridGap,
+                rowWidth = contentW
+            )
         }
 
         content.viewTreeObserver.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
@@ -310,18 +402,23 @@ class MainActivity : Activity() {
 
     /**
      * Apple tvOS 4-App Favorites Dock.
-     * Encapsulated in a frosted glass shelf capsule with rounded corners.
+     * Encapsulated in a frosted glass shelf capsule with rounded corners,
+     * fitted symmetrically to screen width and height.
      */
-    private fun addDockSection(dockApps: List<ResolveInfo>, byPkg: Map<String, ResolveInfo>, hasAppsBelow: Boolean) {
-        val dm = resources.displayMetrics
-        val screenH = dm.heightPixels
-        val topBarH = dp(56)
-        val availableH = screenH - topBarH
-        val peekH = dp(34)
-        val targetWrapperH = availableH - peekH
-        val dockShelfH = dp(132) // 102dp card + 30dp shelf padding
-        val topSpace = maxOf(dp(64), targetWrapperH - dockShelfH - dp(30))
-
+    private fun addDockSection(
+        dockApps: List<ResolveInfo>,
+        byPkg: Map<String, ResolveInfo>,
+        hasAppsBelow: Boolean,
+        targetWrapperH: Int,
+        topSpace: Int,
+        shelfPadH: Int,
+        shelfPadV: Int,
+        shelfR: Float,
+        cardW: Int,
+        cardH: Int,
+        cardR: Float,
+        cardGap: Int
+    ) {
         val dockWrapper = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
@@ -329,7 +426,7 @@ class MainActivity : Activity() {
             clipToPadding = false
             if (hasAppsBelow) {
                 minimumHeight = targetWrapperH
-                setPadding(0, topSpace, 0, dp(30))
+                setPadding(0, topSpace, 0, dp(26))
             } else {
                 setPadding(0, dp(120), 0, dp(60))
             }
@@ -348,10 +445,10 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
             clipChildren = false
             clipToPadding = false
-            setPadding(dp(20), dp(14), dp(20), dp(16))
+            setPadding(shelfPadH, shelfPadV, shelfPadH, shelfPadV)
             background = GradientDrawable().apply {
-                cornerRadius = dp(28).toFloat()
-                setColor(0x40101626.toInt()) // Sleek frosted obsidian dark-glass
+                cornerRadius = shelfR
+                setColor(0x44101626.toInt()) // Sleek frosted obsidian dark-glass
                 setStroke(dp(1), 0x30FFFFFF.toInt()) // Subtle glass rim specular reflection
             }
             addView(dockRow)
@@ -363,12 +460,35 @@ class MainActivity : Activity() {
         sections.add(sec)
 
         dockApps.forEachIndexed { slot, ri ->
-            dockRow.addView(appTile(ri, sec, big = true, isDock = true, dockSlot = slot, byPkg = byPkg))
+            val dominant = getOrComputeColor(ri)
+            val tileView = appTile(
+                ri = ri,
+                sec = sec,
+                big = true,
+                isDock = true,
+                dockSlot = slot,
+                byPkg = byPkg,
+                cardW = cardW,
+                cardH = cardH,
+                cardR = cardR,
+                dominantColor = dominant
+            )
+            val lp = LinearLayout.LayoutParams(cardW, -2).apply {
+                if (slot < dockApps.size - 1) rightMargin = cardGap
+            }
+            dockRow.addView(tileView, lp)
         }
     }
 
-    /** Multi-row Apps grid below the fold (5 apps per row, centered). */
-    private fun addMultiRowAppsSection(apps: List<ResolveInfo>) {
+    /** Multi-row Apps grid below the fold (5 apps per row, screen-adaptive). */
+    private fun addMultiRowAppsSection(
+        apps: List<ResolveInfo>,
+        cardW: Int,
+        cardH: Int,
+        cardR: Float,
+        cardGap: Int,
+        rowWidth: Int
+    ) {
         val byPkg = apps.associateBy { it.activityInfo.packageName }
         val rows = apps.chunked(APPS_PER_ROW)
 
@@ -378,15 +498,32 @@ class MainActivity : Activity() {
                 gravity = Gravity.CENTER_HORIZONTAL
                 clipChildren = false
                 clipToPadding = false
-                setPadding(dp(48), dp(8), dp(48), dp(14))
+                setPadding(0, dp(8), 0, dp(14))
             }
-            content.addView(row)
+            val rowLp = LinearLayout.LayoutParams(rowWidth, -2)
+            content.addView(row, rowLp)
 
             val sec = Sec("app_row_$rowIndex", null, row)
             sections.add(sec)
 
-            rowApps.forEach { ri ->
-                row.addView(appTile(ri, sec, big = false, isDock = false, dockSlot = -1, byPkg = byPkg))
+            rowApps.forEachIndexed { colIndex, ri ->
+                val dominant = getOrComputeColor(ri)
+                val tileView = appTile(
+                    ri = ri,
+                    sec = sec,
+                    big = false,
+                    isDock = false,
+                    dockSlot = -1,
+                    byPkg = byPkg,
+                    cardW = cardW,
+                    cardH = cardH,
+                    cardR = cardR,
+                    dominantColor = dominant
+                )
+                val lp = LinearLayout.LayoutParams(cardW, -2).apply {
+                    if (colIndex < rowApps.size - 1) rightMargin = cardGap
+                }
+                row.addView(tileView, lp)
             }
         }
     }
@@ -399,7 +536,11 @@ class MainActivity : Activity() {
         big: Boolean,
         isDock: Boolean,
         dockSlot: Int,
-        byPkg: Map<String, ResolveInfo>
+        byPkg: Map<String, ResolveInfo>,
+        cardW: Int,
+        cardH: Int,
+        cardR: Float,
+        dominantColor: Int
     ): View {
         val pkg = ri.activityInfo.packageName
         val cls = ri.activityInfo.name
@@ -409,7 +550,11 @@ class MainActivity : Activity() {
             id = pkg,
             name = name,
             big = big,
-            make = { w, h, r -> appArt(ri, w, h, r) },
+            cardW = cardW,
+            cardH = cardH,
+            cardR = cardR,
+            dominantColor = dominantColor,
+            make = { w, h, r -> appArt(ri, w, h, r, dominantColor) },
             click = { launch(pkg, cls) },
             long = { openTileMenu(pkg, name, isDock, dockSlot, byPkg) }
         )
@@ -420,33 +565,36 @@ class MainActivity : Activity() {
         id: String,
         name: String,
         big: Boolean,
+        cardW: Int,
+        cardH: Int,
+        cardR: Float,
+        dominantColor: Int,
         make: (Int, Int, Float) -> Bitmap,
         click: () -> Unit,
         long: (() -> Unit)?
     ): View {
-        // Refined tvOS proportions: compact, elegant 16:9 ratio
-        val w = dp(if (big) 180 else 144)
-        val h = dp(if (big) 102 else 82)
-        val r = dp(if (big) 16 else 12).toFloat()
         val key = sec.id + "|" + id
-        val artKey = id + "|" + w
+        val artKey = id + "|" + cardW + "|" + cardH
 
         val border = GradientDrawable().apply {
-            cornerRadius = r
+            cornerRadius = cardR
             setColor(Color.TRANSPARENT)
             setStroke(0, Color.TRANSPARENT)
         }
 
         val img = ImageView(this).apply {
             scaleType = ImageView.ScaleType.FIT_XY
-            background = GradientDrawable().apply { setColor(0xFF141926.toInt()); cornerRadius = r }
+            background = GradientDrawable().apply {
+                setColor(blendColor(dominantColor, 0xFF141926.toInt(), 0.75f))
+                cornerRadius = cardR
+            }
             foreground = border
             tag = artKey
             outlineProvider = object : ViewOutlineProvider() {
-                override fun getOutline(v: View, o: Outline) { o.setRoundRect(0, 0, v.width, v.height, r) }
+                override fun getOutline(v: View, o: Outline) { o.setRoundRect(0, 0, v.width, v.height, cardR) }
             }
         }
-        loadArt(img, artKey) { make(w, h, r) }
+        loadArt(img, artKey) { make(cardW, cardH, cardR) }
 
         val label = TextView(this).apply {
             text = name
@@ -468,19 +616,16 @@ class MainActivity : Activity() {
             isFocusable = true
             isClickable = true
             tag = key
-            addView(img, LinearLayout.LayoutParams(w, h))
-            addView(label, LinearLayout.LayoutParams(w, -2))
-            layoutParams = LinearLayout.LayoutParams(-2, -2).apply {
-                setMargins(dp(if (big) 9 else 8), 0, dp(if (big) 9 else 8), 0)
-            }
+            addView(img, LinearLayout.LayoutParams(cardW, cardH))
+            addView(label, LinearLayout.LayoutParams(cardW, -2))
 
             // Apple tvOS focus animation:
-            // Dock tiles lift out of the dock capsule (-14dp), scale, and project a deep 32dp shadow.
-            // Grid tiles lift -6dp with a 24dp shadow and white focus glow ring.
+            // Tiles lift forward (-14dp dock / -7dp grid), scale with overshoot physics (1.18x),
+            // project a deep 36dp drop shadow, and show a high-contrast white focus halo.
             setOnFocusChangeListener { v, f ->
-                val s = if (f) 1.15f else 1.0f
-                val lift = if (f) (if (big) -dp(14).toFloat() else -dp(6).toFloat()) else 0f
-                val shadowZ = if (f) (if (big) dp(32).toFloat() else dp(24).toFloat()) else 0f
+                val s = if (f) (if (big) 1.18f else 1.16f) else 1.0f
+                val lift = if (f) (if (big) -dp(14).toFloat() else -dp(7).toFloat()) else 0f
+                val shadowZ = if (f) (if (big) dp(36).toFloat() else dp(26).toFloat()) else 0f
 
                 border.setStroke(dp(3.5f), if (f) Color.WHITE else Color.TRANSPARENT)
 
@@ -496,12 +641,12 @@ class MainActivity : Activity() {
 
                 label.animate()
                     .alpha(if (f) 1f else 0f)
-                    .setDuration(ms(150))
+                    .setDuration(ms(140))
                     .start()
 
                 if (f) {
                     lastKey = key
-                    onTileFocused(v, sec)
+                    onTileFocused(v, sec, dominantColor)
                 }
             }
             setOnClickListener { click() }
@@ -531,7 +676,65 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun appArt(ri: ResolveInfo, w: Int, h: Int, r: Float): Bitmap {
+    /** Extracts the dominant signature hue of an app's icon with zero allocations. */
+    private fun extractDominantColor(bmp: Bitmap): Int {
+        val w = bmp.width
+        val h = bmp.height
+        val stepX = maxOf(1, w / 16)
+        val stepY = maxOf(1, h / 16)
+        var maxScore = -1f
+        var bestColor = 0xFF2A364F.toInt()
+        val hsv = FloatArray(3)
+
+        for (y in 0 until h step stepY) {
+            for (x in 0 until w step stepX) {
+                val pixel = bmp.getPixel(x, y)
+                val alpha = (pixel ushr 24) and 0xFF
+                if (alpha < 100) continue
+
+                Color.colorToHSV(pixel, hsv)
+                val sat = hsv[1]
+                val val_ = hsv[2]
+
+                // Prioritize saturated, medium-bright colors representing the brand identity
+                if (sat > 0.22f && val_ > 0.22f && val_ < 0.95f) {
+                    val score = sat * (1f - Math.abs(val_ - 0.6f))
+                    if (score > maxScore) {
+                        maxScore = score
+                        bestColor = pixel
+                    }
+                }
+            }
+        }
+        return bestColor
+    }
+
+    private fun getOrComputeColor(ri: ResolveInfo): Int {
+        val pkg = ri.activityInfo.packageName
+        colorMap[pkg]?.let { return it }
+        val pm = packageManager
+        val icon = ri.loadIcon(pm)
+        val s = 64
+        val bmp = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        icon.setBounds(0, 0, s, s)
+        icon.draw(c)
+        val color = extractDominantColor(bmp)
+        bmp.recycle()
+        colorMap[pkg] = color
+        return color
+    }
+
+    private fun blendColor(c1: Int, c2: Int, ratio: Float): Int {
+        val ir = 1f - ratio
+        val a = (Color.alpha(c1) * ir + Color.alpha(c2) * ratio).toInt()
+        val r = (Color.red(c1) * ir + Color.red(c2) * ratio).toInt()
+        val g = (Color.green(c1) * ir + Color.green(c2) * ratio).toInt()
+        val b = (Color.blue(c1) * ir + Color.blue(c2) * ratio).toInt()
+        return Color.argb(a, r, g, b)
+    }
+
+    private fun appArt(ri: ResolveInfo, w: Int, h: Int, r: Float, dominantColor: Int): Bitmap {
         val pm = packageManager
         val src = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val c = Canvas(src)
@@ -541,30 +744,44 @@ class MainActivity : Activity() {
             banner.setBounds(0, 0, w, h)
             banner.draw(c)
         } else {
-            // Elegant Apple tvOS / visionOS inspired depth tile
+            // Apple tvOS-style card:
+            // Rich gradient tinted with the app's signature dominant brand color
+            val topColor = blendColor(dominantColor, 0xFF2A364F.toInt(), 0.50f)
+            val bottomColor = blendColor(dominantColor, 0xFF0D121D.toInt(), 0.85f)
+
             val p = Paint().apply {
                 shader = LinearGradient(
-                    0f, 0f, 0f, h.toFloat(),
-                    0xFF222B42.toInt(), 0xFF101422.toInt(),
+                    0f, 0f, w.toFloat(), h.toFloat(),
+                    topColor, bottomColor,
                     Shader.TileMode.CLAMP
                 )
             }
             c.drawRect(0f, 0f, w.toFloat(), h.toFloat(), p)
 
-            // Inner subtle specular highlight ring
-            val rimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            // Apple tvOS glossy top specular sheen
+            val sheen = Paint().apply {
+                shader = LinearGradient(
+                    0f, 0f, 0f, h * 0.48f,
+                    0x33FFFFFF, 0x00FFFFFF,
+                    Shader.TileMode.CLAMP
+                )
+            }
+            c.drawRect(0f, 0f, w.toFloat(), h * 0.48f, sheen)
+
+            // Subtle specular inner glass rim
+            val rim = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 style = Paint.Style.STROKE
                 strokeWidth = 1.5f
-                color = 0x22FFFFFF
+                color = 0x2EFFFFFF
             }
-            c.drawRoundRect(RectF(1f, 1f, w - 1f, h - 1f), r, r, rimPaint)
+            c.drawRoundRect(RectF(1f, 1f, w - 1f, h - 1f), r, r, rim)
 
-            // Native icon centered with crisp proportions
+            // Centered native app icon with crisp proportions
             val icon = ri.loadIcon(pm)
-            val s = (h * 0.52f).toInt()
-            val l = (w - s) / 2
-            val t = (h - s) / 2
-            icon.setBounds(l, t, l + s, t + s)
+            val iconSize = (h * 0.52f).toInt()
+            val left = (w - iconSize) / 2
+            val top = (h - iconSize) / 2
+            icon.setBounds(left, top, left + iconSize, top + iconSize)
             icon.draw(c)
         }
         return rounded(src, r)
@@ -580,17 +797,35 @@ class MainActivity : Activity() {
         return out
     }
 
-    // ───────────────────────── Smooth Scrolling ─────────────────────────
+    // ───────────────────────── Smooth Scrolling & Ambient Bloom ─────────────────────────
 
-    private fun onTileFocused(tile: View, sec: Sec) {
+    private fun onTileFocused(tile: View, sec: Sec, dominantColor: Int) {
         val maxY = maxOf(0, content.height - scroll.height)
         // In the dock: stay at the pristine top of the home screen (scrollY = 0) with peek visible.
         // In app rows: smoothly glide down to center the active row comfortably on screen.
         val wantY = if (sec.id == "dock") 0 else {
             val rowTop = sec.row.top
-            (rowTop - dp(84)).coerceIn(0, maxY)
+            (rowTop - dp(70)).coerceIn(0, maxY)
         }
         glideY(wantY)
+        transitionAmbient(dominantColor)
+    }
+
+    private fun transitionAmbient(color: Int) {
+        if (reduce || targetAmbient == color) return
+        targetAmbient = color
+        ambientAnim?.cancel()
+        val from = if (currentAmbient == Color.TRANSPARENT) 0x00000000 else currentAmbient
+        val to = color
+        ambientAnim = ValueAnimator.ofObject(ArgbEvaluator(), from, to).apply {
+            duration = 380
+            interpolator = decel
+            addUpdateListener { va ->
+                currentAmbient = va.animatedValue as Int
+                ambientGlow.ambientColor = currentAmbient
+            }
+            start()
+        }
     }
 
     private fun glideY(wantY: Int) {
@@ -834,7 +1069,10 @@ class MainActivity : Activity() {
                 (icon as? WifiView)?.let { it.dark = f; it.invalidate() }
                 v.animate().scaleX(if (f) 1.06f else 1f).scaleY(if (f) 1.06f else 1f)
                     .setInterpolator(decel).setDuration(ms(150)).start()
-                if (f) glideY(0)
+                if (f) {
+                    glideY(0)
+                    transitionAmbient(Color.TRANSPARENT)
+                }
             }
             setOnClickListener { onClick() }
         }
