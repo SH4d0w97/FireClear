@@ -8,11 +8,15 @@
 
 ## 2.3
 - **tvOS Launcher Redesign**:
-  - **4-App Favorites Dock (Top Shelf)**: Centered 4-app favorites dock on a translucent glass shelf pedestal with auto-fill symmetry for empty slots.
-  - **Interactive Dock Management**: Reorder dock items with Move Left / Move Right, or pin any app from the grid below into a chosen dock slot (1–4).
-  - **Clutter-Free Home Screen**: Removed the settings tile row from the home screen canvas; full system settings remains accessible with one click via the top-bar status pill.
-  - **tvOS Focus & Depth Animations**: Smooth `1.15x` scale, `-8dp` vertical lift, `28dp` drop shadow elevation, high-contrast white glowing focus ring, and floating title fade-in with a custom cubic deceleration curve.
-  - **Ultra-Low RAM Footprint**: Native Android framework implementation with zero third-party dependencies and a 12 MB LRU bitmap cache for steady 60 FPS performance on Fire TV Sticks.
+  - **Top-Right Status Cluster**: Clean, uncluttered status bar with date tracking on the left and a unified frosted glass capsule cluster on the top-right containing Time, Wi-Fi indicator, Wallpaper customizer, and system Settings.
+  - **4-App Favorites Dock**: Floating frosted dark-glass capsule shelf (`0x40101626` with specular glass rim highlight) holding 4 favorite apps in the lower screen with cinematic negative space above.
+  - **Below-the-Fold Peek**: Responsive viewport geometry dynamically positioned so the top ~34dp of the installed apps row peeks through from the bottom edge of the display, signaling additional rows below without text clutter.
+  - **Multi-Row Apps Grid**: 5-column centered grid for all installed apps revealed upon scrolling down with fluid cubic-bezier decelerated scrolling.
+  - **Interactive Dock Management**: Reorder dock slots with Move Left / Move Right, or pin any app from the grid below into any dock slot (1–4) via Menu key or long-press.
+  - **Clutter-Free Canvas**: Completely removed redundant settings rows from the home canvas.
+  - **tvOS 3D Focus Animations**: `-14dp` dock lift (`-6dp` grid), `1.15x` scale, `32dp` hardware drop shadow elevation, `3.5dp` solid white glowing focus halo, and smooth label fade-in.
+  - **Curated Wallpaper Presets**: 5 cinematic gradient presets inspired by tvOS aerials (*Cosmos*, *Sunset*, *Pacific*, *Aurora*, *Slate*) plus custom photo support with subtle vignette shading.
+  - **Ultra-Low RAM Footprint**: 100% native Android framework implementation with zero third-party dependencies, 60 FPS hardware layers, and a 12 MB LRU cache keeping active memory under 15 MB.
 - **Debloat Tool Updates**:
   - Added **Remove ads only** (backed by new `packages-ads.txt`) — the safest debloat tier.
   - Added **Ad-blocking DNS on/off** (default: AdGuard DNS) with automated round-trip connectivity test and immediate rollback if offline.

@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🔥 FireClear
+# ![Fire](<Glossy Layered Flame Icon.png>) FireClear
 
 **A clean, ad-free tvOS-style home screen and one-menu debloat tool for Fire TV Stick**
 
@@ -30,22 +30,16 @@ Amazon's Fire TV home screen is full of autoplay video ads, banners, and backgro
 ## What the launcher looks like
 
 ```
- 9:41                              [ Wi-Fi ]  [ Customize ]  [ Settings ]
- Sunday, 25 October
+ Sunday, 25 October               [ 9:41 AM ]  [ Wi-Fi ]  [ Wallpaper ]  [ Settings ]
 
- (Generous breathing room)
+                     (Cinematic wallpaper space)
 
- FAVORITES (DOCK)
- ┌──────────────────────────────────────────────────────────────┐
- │  [ YouTube ]   [[ Prime Video ]]   [ Plex ]   [ Netflix ]    │  ← Centered 4-App Dock
- └──────────────────────────────────────────────────────────────┘
-                     Prime Video (lifts, scales & glows)
-
-                     ↓  (Scroll down to reveal installed apps)
-
- APPS
- [ Kodi ]     [ Downloader ] [ Photos ]   [ Browser ]    [ Files ]
- [ Appstore ] [ Calendar ]   [ Weather ]  [ Music ]      [ Games ]
+ ┌────────────────────────────────────────────────────────────────────────┐
+ │   [ YouTube ]    [[ Prime Video ]]     [ Plex ]       [ Netflix ]      │  ← Frosted 4-App Dock
+ └────────────────────────────────────────────────────────────────────────┘
+                      Prime Video (lifts, scales, 3D shadow & halo)
+ ──────────────────────────────────────────────────────────────────────────  ← Screen fold
+       [   Kodi   ]  [ Downloader ]  [  Photos  ]  [  Browser  ]  [  Files  ]  ← Bottom Peek (~34dp)
 ```
 
 No libraries. No network. No background services. Zero dependencies.

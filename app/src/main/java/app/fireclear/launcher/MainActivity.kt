@@ -52,7 +52,7 @@ import java.util.concurrent.Executors
 /** Custom wallpapers above this size are ignored. */
 private const val MAX_WALLPAPER_BYTES = 25L * 1024 * 1024
 
-/** Constant count of apps in the top favorites dock. */
+/** Constant count of apps in the top favorites dock (Apple TV top shelf). */
 private const val DOCK_SLOT_COUNT = 4
 
 /** Apps per row in the grid below the dock. */
@@ -70,7 +70,7 @@ class MainActivity : Activity() {
 
     private val ui = Handler(Looper.getMainLooper())
     private val worker = Executors.newSingleThreadExecutor()
-    private val decel = DecelerateInterpolator(1.6f)
+    private val decel = DecelerateInterpolator(1.8f)
 
     // Art is rendered once at exact tile size, then cached. 12 MB cap keeps RAM minimal.
     private val cache = object : LruCache<String, Bitmap>(12 * 1024 * 1024) {
@@ -98,14 +98,15 @@ class MainActivity : Activity() {
     }
 
     private val presets = listOf(
-        "Aurora" to intArrayOf(0xFF0B1026.toInt(), 0xFF1B2A5C.toInt(), 0xFF5B2A86.toInt()),
-        "Sunset" to intArrayOf(0xFF1A0B1E.toInt(), 0xFF7A2E4D.toInt(), 0xFFE8743B.toInt()),
-        "Ocean" to intArrayOf(0xFF031B2B.toInt(), 0xFF0B4F6C.toInt(), 0xFF1BA8A0.toInt()),
-        "Forest" to intArrayOf(0xFF07140F.toInt(), 0xFF14452F.toInt(), 0xFF5E9E5A.toInt()),
-        "Graphite" to intArrayOf(0xFF0D0D10.toInt(), 0xFF1F2128.toInt(), 0xFF3A3D49.toInt())
+        "Cosmos" to intArrayOf(0xFF080D1A.toInt(), 0xFF121B35.toInt(), 0xFF241C48.toInt()),
+        "Sunset" to intArrayOf(0xFF140818.toInt(), 0xFF4E1638.toInt(), 0xFF9E3A30.toInt()),
+        "Pacific" to intArrayOf(0xFF02121E.toInt(), 0xFF083244.toInt(), 0xFF106864.toInt()),
+        "Aurora" to intArrayOf(0xFF03100B.toInt(), 0xFF0A2B1D.toInt(), 0xFF1D5A3A.toInt()),
+        "Slate" to intArrayOf(0xFF0B0D11.toInt(), 0xFF161922.toInt(), 0xFF252936.toInt())
     )
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+    private fun dp(v: Float) = (v * resources.displayMetrics.density).toInt()
     private fun ms(v: Long) = if (reduce) 0L else v
 
     // ───────────────────────── Lifecycle ─────────────────────────
@@ -122,38 +123,51 @@ class MainActivity : Activity() {
 
         val page = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; clipChildren = false }
 
-        // Apple tvOS-style clean status bar: clock & date on left, pills on right
-        val timeV = TextClock(this).apply {
-            format12Hour = "h:mm"; format24Hour = "HH:mm"
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 36f)
-            setTextColor(Color.WHITE)
-            typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
-        }
+        // Apple tvOS-style top bar: minimalist, elegant, floating
         val dateV = TextClock(this).apply {
-            format12Hour = "EEEE, d MMMM"; format24Hour = "EEEE, d MMMM"
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-            setTextColor(0xB3FFFFFF.toInt())
-        }
-        val left = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            addView(timeV); addView(dateV)
+            format12Hour = "EEEE, MMMM d"; format24Hour = "EEEE, MMMM d"
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
+            setTextColor(0x99FFFFFF.toInt())
+            letterSpacing = 0.12f
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         }
         val bar = LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL
             clipChildren = false
-            setPadding(dp(56), dp(26), dp(56), dp(6))
+            setPadding(dp(52), dp(22), dp(52), dp(4))
         }
-        bar.addView(left, LinearLayout.LayoutParams(0, -2, 1f))
+        bar.addView(dateV, LinearLayout.LayoutParams(0, -2, 1f))
+
+        // tvOS top-right status capsule cluster: Time, Wi-Fi, Wallpaper, Settings
+        val timeV = TextClock(this).apply {
+            format12Hour = "h:mm a"; format24Hour = "HH:mm"
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
+            setTextColor(Color.WHITE)
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        }
+        val timeCapsule = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(14), dp(6), dp(14), dp(6))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(24).toFloat()
+                setColor(0x28FFFFFF)
+            }
+            addView(timeV)
+        }
+        bar.addView(timeCapsule)
+
         wifiIcon = WifiView(this)
         val wifi = pill(wifiIcon, "Wi-Fi") { openSettings(Settings.ACTION_WIFI_SETTINGS) }
         wifiText = wifi.getChildAt(1) as TextView
         bar.addView(wifi, pillLp())
-        bar.addView(pill(null, "Customize") { customize() }, pillLp())
+        bar.addView(pill(null, "Wallpaper") { customize() }, pillLp())
         bar.addView(pill(null, "Settings") { openSettings(Settings.ACTION_SETTINGS) }, pillLp())
 
         content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             clipChildren = false
+            clipToPadding = false
             setPadding(0, 0, 0, dp(80))
         }
         scroll = CalmVScroll(this).apply {
@@ -258,12 +272,14 @@ class MainActivity : Activity() {
         content.removeAllViews()
         sections.clear()
 
-        // 1. APPLE TV-STYLE TOP SHELF FAVORITES DOCK (With generous breathing space from clock)
-        addDockSection(dockApps, byPkg)
+        // 1. APPLE TV-STYLE TOP SHELF FAVORITES DOCK
+        // Positioned in the lower screen with generous cinematic negative space above,
+        // and measured so the tops of the next row of apps peek through from below the fold.
+        addDockSection(dockApps, byPkg, hasAppsBelow = otherApps.isNotEmpty())
 
         // 2. APPS GRID BELOW (Multi-row grid, revealed on scrolling down)
         if (otherApps.isNotEmpty()) {
-            addMultiRowAppsSection("APPS", otherApps)
+            addMultiRowAppsSection(otherApps)
         }
 
         content.viewTreeObserver.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
@@ -292,27 +308,32 @@ class MainActivity : Activity() {
         return out
     }
 
-    /** Apple tvOS 4-App Favorites Dock centered on a frosted glass shelf pedestal. */
-    private fun addDockSection(dockApps: List<ResolveInfo>, byPkg: Map<String, ResolveInfo>) {
+    /**
+     * Apple tvOS 4-App Favorites Dock.
+     * Encapsulated in a frosted glass shelf capsule with rounded corners.
+     */
+    private fun addDockSection(dockApps: List<ResolveInfo>, byPkg: Map<String, ResolveInfo>, hasAppsBelow: Boolean) {
+        val dm = resources.displayMetrics
+        val screenH = dm.heightPixels
+        val topBarH = dp(56)
+        val availableH = screenH - topBarH
+        val peekH = dp(34)
+        val targetWrapperH = availableH - peekH
+        val dockShelfH = dp(132) // 102dp card + 30dp shelf padding
+        val topSpace = maxOf(dp(64), targetWrapperH - dockShelfH - dp(30))
+
         val dockWrapper = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             clipChildren = false
             clipToPadding = false
-            // Generous breathing space between top bar and dock (phone / tvOS style)
-            setPadding(0, dp(64), 0, dp(140))
+            if (hasAppsBelow) {
+                minimumHeight = targetWrapperH
+                setPadding(0, topSpace, 0, dp(30))
+            } else {
+                setPadding(0, dp(120), 0, dp(60))
+            }
         }
-
-        val head = TextView(this).apply {
-            text = "FAVORITES"
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            setTextColor(0x88FFFFFF.toInt())
-            letterSpacing = 0.18f
-            gravity = Gravity.CENTER
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            setPadding(0, 0, 0, dp(12))
-        }
-        dockWrapper.addView(head)
 
         val dockRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -321,24 +342,24 @@ class MainActivity : Activity() {
             clipToPadding = false
         }
 
-        // Translucent glass shelf pedestal
+        // Apple tvOS signature frosted glass capsule shelf
         val shelf = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
             clipChildren = false
             clipToPadding = false
-            setPadding(dp(18), dp(12), dp(18), dp(14))
+            setPadding(dp(20), dp(14), dp(20), dp(16))
             background = GradientDrawable().apply {
-                cornerRadius = dp(22).toFloat()
-                setColor(0x18FFFFFF)
-                setStroke(dp(1), 0x22FFFFFF.toInt())
+                cornerRadius = dp(28).toFloat()
+                setColor(0x40101626.toInt()) // Sleek frosted obsidian dark-glass
+                setStroke(dp(1), 0x30FFFFFF.toInt()) // Subtle glass rim specular reflection
             }
             addView(dockRow)
         }
         dockWrapper.addView(shelf)
         content.addView(dockWrapper)
 
-        val sec = Sec("dock", head, dockRow)
+        val sec = Sec("dock", null, dockRow)
         sections.add(sec)
 
         dockApps.forEachIndexed { slot, ri ->
@@ -347,17 +368,7 @@ class MainActivity : Activity() {
     }
 
     /** Multi-row Apps grid below the fold (5 apps per row, centered). */
-    private fun addMultiRowAppsSection(title: String, apps: List<ResolveInfo>) {
-        val head = TextView(this).apply {
-            text = title
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            setTextColor(0x88FFFFFF.toInt())
-            letterSpacing = 0.16f
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            setPadding(dp(72), dp(8), 0, dp(12))
-        }
-        content.addView(head)
-
+    private fun addMultiRowAppsSection(apps: List<ResolveInfo>) {
         val byPkg = apps.associateBy { it.activityInfo.packageName }
         val rows = apps.chunked(APPS_PER_ROW)
 
@@ -367,11 +378,11 @@ class MainActivity : Activity() {
                 gravity = Gravity.CENTER_HORIZONTAL
                 clipChildren = false
                 clipToPadding = false
-                setPadding(dp(48), dp(6), dp(48), dp(16))
+                setPadding(dp(48), dp(8), dp(48), dp(14))
             }
             content.addView(row)
 
-            val sec = Sec("app_row_$rowIndex", if (rowIndex == 0) head else null, row)
+            val sec = Sec("app_row_$rowIndex", null, row)
             sections.add(sec)
 
             rowApps.forEach { ri ->
@@ -413,10 +424,10 @@ class MainActivity : Activity() {
         click: () -> Unit,
         long: (() -> Unit)?
     ): View {
-        // Compact, refined card proportions for premium tvOS feel
-        val w = dp(if (big) 196 else 148)
-        val h = dp(if (big) 110 else 84)
-        val r = dp(if (big) 14 else 11).toFloat()
+        // Refined tvOS proportions: compact, elegant 16:9 ratio
+        val w = dp(if (big) 180 else 144)
+        val h = dp(if (big) 102 else 82)
+        val r = dp(if (big) 16 else 12).toFloat()
         val key = sec.id + "|" + id
         val artKey = id + "|" + w
 
@@ -428,7 +439,7 @@ class MainActivity : Activity() {
 
         val img = ImageView(this).apply {
             scaleType = ImageView.ScaleType.FIT_XY
-            background = GradientDrawable().apply { setColor(0xFF1B2238.toInt()); cornerRadius = r }
+            background = GradientDrawable().apply { setColor(0xFF141926.toInt()); cornerRadius = r }
             foreground = border
             tag = artKey
             outlineProvider = object : ViewOutlineProvider() {
@@ -439,13 +450,14 @@ class MainActivity : Activity() {
 
         val label = TextView(this).apply {
             text = name
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, if (big) 13f else 12f)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, if (big) 12.5f else 11.5f)
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
             alpha = 0f
-            setPadding(0, dp(8), 0, 0)
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            setPadding(0, dp(7), 0, 0)
         }
 
         return LinearLayout(this).apply {
@@ -459,16 +471,18 @@ class MainActivity : Activity() {
             addView(img, LinearLayout.LayoutParams(w, h))
             addView(label, LinearLayout.LayoutParams(w, -2))
             layoutParams = LinearLayout.LayoutParams(-2, -2).apply {
-                setMargins(dp(if (big) 10 else 8), 0, dp(if (big) 10 else 8), 0)
+                setMargins(dp(if (big) 9 else 8), 0, dp(if (big) 9 else 8), 0)
             }
 
-            // Apple tvOS focus animation: lift, scale, glowing ring, soft elevation shadow, and label fade
+            // Apple tvOS focus animation:
+            // Dock tiles lift out of the dock capsule (-14dp), scale, and project a deep 32dp shadow.
+            // Grid tiles lift -6dp with a 24dp shadow and white focus glow ring.
             setOnFocusChangeListener { v, f ->
-                val s = if (f) (if (big) 1.12f else 1.15f) else 1.0f
-                val lift = if (f) -dp(6).toFloat() else 0f
-                val shadowZ = if (f) dp(24).toFloat() else 0f
+                val s = if (f) 1.15f else 1.0f
+                val lift = if (f) (if (big) -dp(14).toFloat() else -dp(6).toFloat()) else 0f
+                val shadowZ = if (f) (if (big) dp(32).toFloat() else dp(24).toFloat()) else 0f
 
-                border.setStroke(dp(3), if (f) 0xF5FFFFFF.toInt() else Color.TRANSPARENT)
+                border.setStroke(dp(3.5f), if (f) Color.WHITE else Color.TRANSPARENT)
 
                 img.animate()
                     .scaleX(s)
@@ -523,16 +537,31 @@ class MainActivity : Activity() {
         val c = Canvas(src)
         val banner = ri.activityInfo.loadBanner(pm)
         if (banner != null) {
-            c.drawColor(0xFF1B2238.toInt())
+            c.drawColor(0xFF141926.toInt())
             banner.setBounds(0, 0, w, h)
             banner.draw(c)
         } else {
+            // Elegant Apple tvOS / visionOS inspired depth tile
             val p = Paint().apply {
-                shader = LinearGradient(0f, 0f, 0f, h.toFloat(), 0xFF2A345C.toInt(), 0xFF141933.toInt(), Shader.TileMode.CLAMP)
+                shader = LinearGradient(
+                    0f, 0f, 0f, h.toFloat(),
+                    0xFF222B42.toInt(), 0xFF101422.toInt(),
+                    Shader.TileMode.CLAMP
+                )
             }
             c.drawRect(0f, 0f, w.toFloat(), h.toFloat(), p)
+
+            // Inner subtle specular highlight ring
+            val rimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.STROKE
+                strokeWidth = 1.5f
+                color = 0x22FFFFFF
+            }
+            c.drawRoundRect(RectF(1f, 1f, w - 1f, h - 1f), r, r, rimPaint)
+
+            // Native icon centered with crisp proportions
             val icon = ri.loadIcon(pm)
-            val s = (h * 0.54f).toInt()
+            val s = (h * 0.52f).toInt()
             val l = (w - s) / 2
             val t = (h - s) / 2
             icon.setBounds(l, t, l + s, t + s)
@@ -555,11 +584,11 @@ class MainActivity : Activity() {
 
     private fun onTileFocused(tile: View, sec: Sec) {
         val maxY = maxOf(0, content.height - scroll.height)
-        // In the dock: stay at the pristine top of the home screen (scrollY = 0).
-        // In app rows: smoothly glide down to center the active row on screen.
+        // In the dock: stay at the pristine top of the home screen (scrollY = 0) with peek visible.
+        // In app rows: smoothly glide down to center the active row comfortably on screen.
         val wantY = if (sec.id == "dock") 0 else {
             val rowTop = sec.row.top
-            (rowTop - dp(100)).coerceIn(0, maxY)
+            (rowTop - dp(84)).coerceIn(0, maxY)
         }
         glideY(wantY)
     }
@@ -628,7 +657,7 @@ class MainActivity : Activity() {
             }
         } else {
             // Pin or replace in one of the 4 dock slots
-            opt("Pin to Dock") {
+            opt("Pin to Favorites Dock") {
                 val slotOptions = (0 until DOCK_SLOT_COUNT).map { slot ->
                     val occupantPkg = currentDock.getOrNull(slot)
                     val occupantName = if (occupantPkg != null) {
@@ -676,7 +705,7 @@ class MainActivity : Activity() {
     private fun customize() {
         val anim = "Animations: " + (if (reduce) "Off" else "On") + " (select to switch)"
         val names = presets.map { it.first } + listOf("Custom photo", "Unhide all apps", anim)
-        AlertDialog.Builder(this).setTitle("Customize")
+        AlertDialog.Builder(this).setTitle("Customize Wallpaper")
             .setItems(names.toTypedArray()) { _, i ->
                 when {
                     i < presets.size -> { prefs.edit().putInt("wp", i).apply(); applyWallpaper() }
@@ -714,8 +743,12 @@ class MainActivity : Activity() {
 
     private fun shade(cv: Canvas, w: Int, h: Int) {
         val p = Paint().apply {
-            shader = LinearGradient(0f, 0f, 0f, h.toFloat(),
-                intArrayOf(0x88000000.toInt(), 0x10000000, 0xAA000000.toInt()), null, Shader.TileMode.CLAMP)
+            shader = LinearGradient(
+                0f, 0f, 0f, h.toFloat(),
+                intArrayOf(0x50000000.toInt(), 0x05000000, 0x77000000.toInt()),
+                floatArrayOf(0f, 0.45f, 1f),
+                Shader.TileMode.CLAMP
+            )
         }
         cv.drawRect(0f, 0f, w.toFloat(), h.toFloat(), p)
     }
@@ -729,7 +762,7 @@ class MainActivity : Activity() {
         p.shader = LinearGradient(0f, 0f, w.toFloat(), h.toFloat(), c, floatArrayOf(0f, 0.55f, 1f), Shader.TileMode.CLAMP)
         cv.drawRect(0f, 0f, w.toFloat(), h.toFloat(), p)
         p.shader = RadialGradient(w * 0.85f, h * 0.12f, w * 0.6f,
-            intArrayOf(0x66FFFFFF, 0x00FFFFFF), null, Shader.TileMode.CLAMP)
+            intArrayOf(0x55FFFFFF, 0x00FFFFFF), null, Shader.TileMode.CLAMP)
         cv.drawRect(0f, 0f, w.toFloat(), h.toFloat(), p)
         shade(cv, w, h)
         return bmp
@@ -776,29 +809,30 @@ class MainActivity : Activity() {
 
     // ───────────────────────── Top Bar Bits ─────────────────────────
 
-    private fun pillLp() = LinearLayout.LayoutParams(-2, -2).apply { leftMargin = dp(12) }
+    private fun pillLp() = LinearLayout.LayoutParams(-2, -2).apply { leftMargin = dp(8) }
 
     private fun pill(icon: View?, text: String, onClick: () -> Unit): LinearLayout {
-        val bg = GradientDrawable().apply { cornerRadius = dp(30).toFloat(); setColor(0x33FFFFFF) }
+        val bg = GradientDrawable().apply { cornerRadius = dp(24).toFloat(); setColor(0x28FFFFFF) }
         val label = TextView(this).apply {
             this.text = text
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
             setTextColor(Color.WHITE)
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         }
         return LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(16), dp(8), dp(18), dp(8))
+            setPadding(dp(14), dp(6), dp(15), dp(6))
             background = bg
             isFocusable = true
             isClickable = true
-            if (icon != null) addView(icon, LinearLayout.LayoutParams(dp(22), dp(16)).apply { rightMargin = dp(8) })
+            if (icon != null) addView(icon, LinearLayout.LayoutParams(dp(18), dp(14)).apply { rightMargin = dp(6) })
             addView(label)
             setOnFocusChangeListener { v, f ->
-                bg.setColor(if (f) 0xF2FFFFFF.toInt() else 0x33FFFFFF)
+                bg.setColor(if (f) 0xF2FFFFFF.toInt() else 0x28FFFFFF)
                 label.setTextColor(if (f) 0xFF111111.toInt() else Color.WHITE)
                 (icon as? WifiView)?.let { it.dark = f; it.invalidate() }
-                v.animate().scaleX(if (f) 1.07f else 1f).scaleY(if (f) 1.07f else 1f)
+                v.animate().scaleX(if (f) 1.06f else 1f).scaleY(if (f) 1.06f else 1f)
                     .setInterpolator(decel).setDuration(ms(150)).start()
                 if (f) glideY(0)
             }
