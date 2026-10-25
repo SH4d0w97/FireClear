@@ -1,5 +1,8 @@
 # Changelog
 
+## 2.3.1 - 2026-10-25
+- Automated patch release bump from 2.3 (versionCode 5) to 2.3.1 (versionCode 6).
+
 ## 2.3
 - **Debloat Tool Updates**:
   - Added **Remove ads only** (backed by new `packages-ads.txt`) — the safest debloat tier.
