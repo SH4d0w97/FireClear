@@ -15,8 +15,8 @@ android {
         applicationId = "app.fireclear.launcher"
         minSdk = 25
         targetSdk = 28   // Fire OS 7 = Android 9
-        versionCode = 7
-        versionName = "2.3.2"
+        versionCode = 8
+        versionName = "2.3.3"
     }
     signingConfigs {
         if (ksPath != null) {
