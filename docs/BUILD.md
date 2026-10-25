@@ -27,23 +27,38 @@ Go to **Actions** → select **build** → click the latest run → scroll down 
 
 ---
 
-## 🚀 B. Publishing a Release
+## 🚀 B. Publishing a Release (Manual + Safe)
 
-Releases are triggered automatically when you push a version tag starting with `v` (e.g. `v2.3`):
+Releases are created only by manually running **Actions → release → Run workflow**.
 
-### 1. Create and push a tag
-```bash
-git tag v2.3
-git push origin v2.3
-```
+### 1. Choose `bump_type`
+The workflow requires one input:
+- `patch`: `x.y.z -> x.y.(z+1)`
+- `minor`: `x.y.z -> x.(y+1).0`
+- `major`: `(x+1).0.0`
 
-### 2. What the Release Workflow does
-The `release.yml` workflow:
-- Runs security audits.
-- Signs the APK with your release key (if repository secrets are configured) or produces a debug-signed build as fallback.
-- Verifies permissions on the final APK.
-- Generates `SHA256SUMS.txt`.
-- Creates a new GitHub Release with release notes automatically attached, hosting `FireClear-v2.3.apk` and `SHA256SUMS.txt`.
+If `versionName` has fewer than 3 parts (for example `2.3`), it is normalized to `2.3.0` before the bump is applied. `versionCode` is always incremented by exactly 1.
+
+### 2. What the release workflow does
+`release.yml` performs these steps in order:
+1. Reads current `versionName`/`versionCode` from `app/build.gradle.kts`.
+2. Computes the next version from `bump_type`.
+3. Fails early if `v<version>` tag or matching GitHub Release already exists.
+4. Updates `app/build.gradle.kts` and prepends a dated release entry to `CHANGELOG.md`.
+5. Commits those changes to the default branch as `github-actions[bot]`.
+6. Creates and pushes tag `v<version>`.
+7. Runs `scripts/audit.sh`, builds APK, and verifies it with `scripts/verify-apk.sh`.
+8. Publishes a GitHub Release with:
+   - `FireClear-v<version>.apk`
+   - `SHA256SUMS.txt`
+   - generated release notes.
+
+### 3. Signing behavior
+- If all signing secrets are present (`FIRECLEAR_KEYSTORE_B64`, `FIRECLEAR_KS_PASS`, `FIRECLEAR_KEY_ALIAS`, `FIRECLEAR_KEY_PASS`), the workflow builds a signed **release** APK.
+- Otherwise it builds a **debug-signed** APK and labels the release body as testing/debug-signed.
+
+### 4. Downloading the APK
+Download release APKs from **GitHub Releases**: [../../releases/latest](../../releases/latest)
 
 ---
 
