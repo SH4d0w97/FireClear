@@ -10,3 +10,4 @@ set APP_HOME=%DIRNAME%
 
 @rem Execute Gradle
 "%JAVA_HOME%\bin\java.exe" -classpath "%APP_HOME%\gradle\wrapper\gradle-wrapper.jar" org.gradle.wrapper.GradleWrapperMain %*
+
