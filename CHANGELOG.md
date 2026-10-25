@@ -1,5 +1,8 @@
 # Changelog
 
+## 2.3.1 - 2026-10-25
+- Automated patch release bump from 2.3 (versionCode 5) to 2.3.1 (versionCode 6).
+
 ## 2.3
 - **tvOS Launcher Redesign**:
   - **4-App Favorites Dock (Top Shelf)**: Centered 4-app favorites dock on a translucent glass shelf pedestal with auto-fill symmetry for empty slots.
