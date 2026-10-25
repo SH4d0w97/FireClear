@@ -1,11 +1,5 @@
 # Changelog
 
-## 4.0.0 - 2026-10-25
-- Automated major release bump from 3.0.2 (versionCode 11) to 4.0.0 (versionCode 12).
-
-## 3.0.0 - 2026-10-25
-- Automated major release bump from 2.3.3 (versionCode 8) to 3.0.0 (versionCode 9).
-
 ## 2.3.3 - 2026-10-25
 - Automated patch release bump from 2.3.2 (versionCode 7) to 2.3.3 (versionCode 8).
 
@@ -17,13 +11,15 @@
 
 ## 2.3
 - **Smart TV Launcher Redesign**:
+  - **Hero Showcase Header on Home**: Dynamic cinematic typography on the Favourites view that smoothly cross-fades the focused app's title, category metadata tag, and action hint over the atmospheric wallpaper.
+  - **Interactive Wi-Fi System Pill**: Clickable and focusable top-right pill displaying the live Wi-Fi SSID/connection status that directly opens network settings on select/click.
+  - **Refined Control Center (Settings View)**: 6 distinct, non-redundant quick setting tiles (*Network & Wi-Fi*, *Remotes & Bluetooth*, *Wallpaper & Themes*, *Applications*, *Display & Sounds*, *Device & About*) featuring circular frosted icon badges and informative live subtitles, alongside the full-width *All Settings* gateway.
+  - **Prominent Card Anatomy**: Expanded app icons to 60% card height with multi-stop brand gradient backdrops, top specular glass sheens, and inner glass rims.
+  - **Full Immersive Fullscreen**: Edge-to-edge layout hiding distracting system gesture and status bars on tablets and TV displays.
   - **Independently Centered Glass Navigation Pill**: Translucent smoky charcoal capsule (`#20252D` at ~67% opacity with a subtle white border) centered horizontally across the display. Switches seamlessly between **Favourites**, **All Apps**, and **Settings** with white pill active highlights.
-  - **Cinematic Minimalism on Home**: The Home screen contains exclusively the 4 pinned apps in the lower dock surrounded by generous negative space that lets the full-screen atmospheric wallpaper breathe.
   - **Adaptive Ambient Glow**: Broad, soft, low-opacity radial bloom near the bottom dock that smoothly cross-fades (300ms) to reflect the focused app's dominant signature brand color.
-  - **Structured All Applications View**: Dedicated 5-column grid for installed apps featuring brand-tinted cards with top specular sheens and inner rims.
-  - **Quick Settings Control Center**: 2×3 grid of quick setting tiles (*Wi-Fi*, *Bluetooth*, *Wallpaper*, *Sound*, *Display*, *Network*) plus a full-width *All Settings* gateway with high-contrast active feedback.
   - **Restrained Focus Physics**: Pinned tiles scale slightly (1.06×), project a clean soft-white outline, and cast subtle depth shadows with a smooth 240ms transition.
-  - **Clean Header Layout**: Top-left digital clock and cool gray date (`#C3CAD3`) without background containers, balanced with a minimal line Wi-Fi glyph on the top-right.
+  - **Clean Header Layout**: Top-left digital clock and cool gray date (`#C3CAD3`) without background containers, balanced with the interactive Wi-Fi system pill on the top-right.
   - **Design Token Palette**: Standardized around Midnight Black (`#0B0F14`), Smoky Charcoal (`#20252D`), Soft White (`#FFFFFF`), Cool Gray (`#C3CAD3`), and Muted Blue (`#597A91`).
   - **Ultra-Low RAM Footprint**: 100% native Android framework implementation with zero third-party dependencies, 60 FPS hardware layers, and a 12 MB LRU cache keeping active memory under 15 MB.
 - **Debloat Tool Updates**:
