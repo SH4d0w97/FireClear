@@ -1,33 +1,36 @@
 <div align="center">
 
-# ![Fire](<Glossy Layered Flame Icon.png>) FireClear
+  <img src="Glossy Layered Flame Icon.png" alt="FireClear Logo" width="76" height="76" />
 
-**A clean, ad-free tvOS-style home screen and one-menu debloat tool for Fire TV Stick**
+  # FireClear
 
-[![build](https://github.com/SH4d0w97/FireClear/actions/workflows/build.yml/badge.svg)](https://github.com/SH4d0w97/FireClear/actions/workflows/build.yml)
-![license](https://img.shields.io/badge/license-MIT-blue)
-![Fire OS](https://img.shields.io/badge/Fire%20OS-7-orange)
-![no internet](https://img.shields.io/badge/internet%20permission-none-brightgreen)
-![zero dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)
+  **A focused, privacy-first home launcher and reversible debloat toolkit for Amazon Fire TV.**
 
-[**⬇ Download APK**](../../releases/latest) · [Full Guide](docs/GUIDE.md) · [Ad Removal Details](docs/ADS.md) · [Build It Yourself](docs/BUILD.md) · [Security](docs/SECURITY.md)
+  [![Build Status](https://github.com/SH4d0w97/FireClear/actions/workflows/build.yml/badge.svg)](https://github.com/SH4d0w97/FireClear/actions/workflows/build.yml)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+  ![Platform](https://img.shields.io/badge/Platform-Fire%20OS%207%2B%20(Android%209%2B)-orange)
+  ![Network Permission](https://img.shields.io/badge/Network%20Access-None-brightgreen)
+  ![Dependencies](https://img.shields.io/badge/Dependencies-0-brightgreen)
+
+  [**Download Latest Release**](../../releases/latest) &nbsp;•&nbsp; [**Setup Guide**](#-setup-guide) &nbsp;•&nbsp; [**Documentation**](docs/GUIDE.md) &nbsp;•&nbsp; [**Security Model**](docs/SECURITY.md)
 
 </div>
 
 ---
 
-## What is FireClear?
+## Overview
 
-Amazon's Fire TV home screen is full of autoplay video ads, banners, and background services you never asked for. **FireClear fixes that in two parts:**
+Modern streaming devices are increasingly overwhelmed by sponsored autoplay videos, full-screen banner advertisements, and background telemetry services. **FireClear** restores your Fire TV to an intentional, responsive streaming interface in two complementary parts:
 
-| Part | What it does |
-|---|---|
-| 🏠 **Launcher** | Replaces Amazon's home screen with a calm, fast, tvOS-style interface — no ads, no banners |
-| 🧹 **Debloat Tool** | A simple menu-driven script that disables Amazon's ad, tracking, and junk packages via ADB. **Everything is reversible.** |
+1. **The Launcher (`app.fireclear.launcher`)**  
+   A refined, tvOS-inspired home screen engineered with native Android framework components. Features a floating 4-app favorites dock, smooth 60 FPS hardware animations, multi-row app grids, and a strict sub-15 MB RAM footprint. It contains **no network permission**—guaranteeing that it cannot transmit data or serve advertisements.
+
+2. **The Debloat Toolkit (`firetv-tool`)**  
+   An interactive, menu-driven script for Windows, macOS, Linux, and Android (Termux). It safely disables Amazon telemetry, ad engines, and unused system background packages using standard ADB user profiles. No root required, zero binary payloads, and **every change is 100% reversible**.
 
 ---
 
-## What the launcher looks like
+## Interface & Navigation
 
 ```
  Sunday, 25 October               [ 9:41 AM ]  [ Wi-Fi ]  [ Wallpaper ]  [ Settings ]
@@ -42,48 +45,55 @@ Amazon's Fire TV home screen is full of autoplay video ads, banners, and backgro
        [   Kodi   ]  [ Downloader ]  [  Photos  ]  [  Browser  ]  [  Files  ]  ← Bottom Peek (~34dp)
 ```
 
-No libraries. No network. No background services. Zero dependencies.
+- **Top-Right Status Cluster:** Discreet time capsule, real-time Wi-Fi status, wallpaper customizer, and one-click access to system settings.
+- **Floating Favorites Dock:** Holds your 4 most essential apps on a frosted glass shelf capsule with specular edge highlights.
+- **Below-the-Fold Peek:** When on the dock, the top ~34dp of the installed apps row peeks through from the bottom edge, indicating additional content without visual clutter.
+- **Smooth Expansion:** Pressing **Down** smoothly glides the viewport into the centered 5-column grid of all installed apps.
+- **Fluid Focus Physics:** Focused tiles lift forward, scale smoothly, cast depth shadows, and present high-contrast focus rings with gentle label fade-ins.
 
 ---
 
-## Quick Feature Overview
+## Core Principles
 
-- ✅ **Ad-free home screen** — Amazon's ad-heavy launcher replaced entirely
-- ✅ **One-click debloat** — disable ad IDs, telemetry, recommendations, junk apps
-- ✅ **Ad-blocking DNS** — blocks ad/tracker domains for every app on the stick
-- ✅ **Privacy toggles guide** — turn off the last data collection switches by hand
-- ✅ **Full undo** — every single change can be reversed from the same menu
-- ✅ **No internet permission** — the app literally cannot upload anything
-- ✅ **Tablet-friendly** — works from an Android tablet with Termux, no PC needed
-
----
-
-## 📋 Complete Step-by-Step Guide
-
-> **Requirements:** Your Fire TV Stick and your computer/tablet must be on the **same Wi-Fi network.**
+| Principle | Implementation |
+|---|---|
+| **Zero Network Exposure** | `android.permission.INTERNET` is intentionally omitted from the manifest. The operating system prevents the app from opening network sockets. |
+| **Zero Dependencies** | Written purely against standard Android SDK APIs. No third-party libraries, analytics SDKs, WebViews, or dynamic code execution. |
+| **Minimal Footprint** | Dynamic tile art is rasterized on a single background thread and cached in a strict 12 MB LRU memory cache, maintaining sub-15 MB active RAM. |
+| **Non-Destructive Debloat** | The toolkit disables packages via `pm disable-user --user 0`. System partitions remain untouched; every package can be restored with a single click. |
+| **Automatic Safety Guards** | Private DNS ad-blocking performs automated round-trip connectivity tests and rolls back immediately if your connection drops. |
 
 ---
 
-### Step 1 — Prepare your computer (or tablet)
+## 📋 Setup Guide
 
-Pick your platform and install ADB:
+> **Prerequisite:** Your Fire TV Stick and your computer (or phone/tablet) must be connected to the **same local Wi-Fi network**.
+
+---
+
+### Step 1 — Prepare ADB on Your Host Device
+
+Choose your platform to verify ADB is ready:
 
 <details>
 <summary>🪟 Windows</summary>
 
-1. Download [SDK Platform-Tools](https://developer.android.com/studio/releases/platform-tools) from Google.
-2. Unzip it anywhere (e.g. `C:\platform-tools`).
-3. Open **Command Prompt** in that folder (Shift + Right-click → "Open command window here").
-4. Test it: `adb version` — you should see a version number.
+1. Download the official [Google SDK Platform-Tools for Windows](https://developer.android.com/studio/releases/platform-tools).
+2. Extract the archive (for example, to `C:\platform-tools`).
+3. Open PowerShell or Command Prompt in that folder and verify:
+   ```cmd
+   adb version
+   ```
 
 </details>
 
 <details>
 <summary>🍎 macOS</summary>
 
+Install via Homebrew:
 ```bash
 brew install android-platform-tools
-adb version   # confirm it works
+adb version
 ```
 
 </details>
@@ -91,86 +101,64 @@ adb version   # confirm it works
 <details>
 <summary>🐧 Linux</summary>
 
+Install via your package manager:
 ```bash
-sudo apt install adb
-adb version   # confirm it works
+sudo apt install adb   # Debian / Ubuntu / Mint
+sudo dnf install adb   # Fedora
+adb version
 ```
 
 </details>
 
 <details>
-<summary>📱 Android Tablet (no PC needed — Termux)</summary>
+<summary>📱 Android Phone or Tablet (No PC Required)</summary>
 
-1. Install **F-Droid** from [f-droid.org](https://f-droid.org) (allow installs from your browser once).
-2. From F-Droid, install **Termux**. *(Do not use the Play Store version.)*
+1. Install **F-Droid** from [f-droid.org](https://f-droid.org).
+2. Install **Termux** from F-Droid (do not use the obsolete Play Store version).
 3. In Termux, run:
    ```bash
-   pkg update -y && pkg upgrade -y
-   pkg install -y git unzip android-tools
-   termux-setup-storage    # tap Allow when prompted
-   adb version             # confirm it works
+   pkg update -y && pkg install -y git android-tools
+   adb version
    ```
 
 </details>
 
 ---
 
-### Step 2 — Enable ADB on the Fire TV
+### Step 2 — Enable Developer Options on Fire TV
 
-1. On your Fire TV: go to **Settings → My Fire TV → About**
-2. Highlight the **device name** (e.g. "Fire TV Stick") and press **Select 7 times** rapidly
-   - You'll see a toast: *"No need, you are already a developer"* — that means it worked ✅
-3. Go back to **My Fire TV → Developer Options** and turn on:
-   - ✅ **ADB Debugging** → ON
-   - ✅ **Apps from Unknown Sources** → ON
-4. Note your Fire TV's IP address: **Settings → My Fire TV → About → Network**
-   - It looks like `192.168.x.x`
-
----
-
-### Step 3 — Get the FireClear APK
-
-**Option A — Download (easiest):**
-Go to [Releases](../../releases/latest) and download `FireClear-vX.Y.apk` + `SHA256SUMS.txt`.
-
-Verify the download hasn't been tampered with:
-```bash
-# macOS/Linux:
-sha256sum -c SHA256SUMS.txt
-
-# Windows:
-certutil -hashfile FireClear-v2.3.apk SHA256
-# compare the output against the hash in SHA256SUMS.txt
-```
-
-**Option B — Build it yourself (most trustworthy):**
-See [docs/BUILD.md](docs/BUILD.md). GitHub Actions can build it for free — even from a tablet.
+1. On your Fire TV, go to **Settings → My Fire TV → About**.
+2. Highlight your device name (e.g. *Fire TV Stick 4K*) and press the remote's **Select** button **7 times**.
+   * A toast notification will appear: *"No need, you are already a developer."*
+3. Press **Back**, open **Developer Options**, and set:
+   - **ADB Debugging** → **ON**
+   - **Apps from Unknown Sources** → **ON**
+4. Check your Fire TV's IP address under **Settings → My Fire TV → About → Network** (e.g. `192.168.1.50`).
 
 ---
 
-### Step 4 — Connect ADB to your Fire TV
+### Step 3 — Connect via ADB
 
-Open a terminal/command prompt and run:
+In your terminal or command prompt:
+
 ```bash
-adb connect YOUR_TV_IP:5555
-# example: adb connect 192.168.1.42:5555
+adb connect YOUR_FIRE_TV_IP:5555
+# Example: adb connect 192.168.1.50:5555
 ```
 
-**First time only:** a dialog will pop up on your TV asking *"Allow USB debugging?"*
-→ Check **"Always allow from this computer"** → Press **OK**
+> **First connection:** A prompt will appear on your TV asking *"Allow USB debugging?"* Check **"Always allow from this computer"** and select **OK**.
 
-Then confirm it's connected:
+Verify the connection status:
 ```bash
 adb devices
-# should show:  192.168.x.x:5555    device
+# Expected output: 192.168.x.x:5555    device
 ```
-If it shows `unauthorized`, the dialog appeared on your TV — go approve it there.
 
 ---
 
-### Step 5 — Run the FireClear Tool
+### Step 4 — Run the FireClear Toolkit
 
-Navigate to the `tools` folder of this repo and run the script:
+Clone or download this repository, navigate to the `tools/` directory, and launch the script:
 
 ```bash
 # macOS / Linux / Termux:
@@ -182,258 +170,120 @@ cd tools
 firetv-tool.bat
 ```
 
-You'll see this menu:
+You will be greeted by the interactive management console:
 
 ```
-┌──────────────────────────────────────────────────────┐
-│  FireClear Tool                                      │
-│                                                      │
-│  1  Remove ads only          (safest — start here)   │
-│  2  Full debloat             (disables junk apps)    │
-│  3  Full debloat, harder     (removes if needed)     │
-│  4  Ad-blocking DNS ON                               │
-│  5  Ad-blocking DNS OFF                              │
-│  6  Undo debloat             (restore everything)    │
-│  7  Install APK                                      │
-│  8  Set FireClear as Home                            │
-│  9  Restore Amazon Home                              │
-│  0  Quit                                             │
-└──────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│  FireClear Toolkit                                           │
+│                                                              │
+│  1  Remove ads only          (safest tier — start here)      │
+│  2  Full debloat             (disables telemetry & bloat)    │
+│  3  Full debloat, aggressive (deep package cleanup)          │
+│  4  Ad-blocking DNS ON       (system-wide ad blocking)       │
+│  5  Ad-blocking DNS OFF      (restore default DNS)           │
+│  6  Undo debloat             (restore all disabled packages) │
+│  7  Install APK              (sideload FireClear launcher)   │
+│  8  Set FireClear as Home    (enable custom launcher)        │
+│  9  Restore Amazon Home      (re-enable stock launcher)      │
+│  0  Quit                                                     │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-### Step 6 — Follow this order (recommended)
+### Step 5 — Recommended Deployment Workflow
 
-> Follow these steps in order for the best result. Each step can be undone.
+For the cleanest and most stable experience, proceed in this order:
 
-#### 6a. Install the launcher
-Choose **`7` Install APK** and enter the path to the `.apk` file you downloaded.
+1. **Install the Launcher (`Option 7`)**  
+   Download the latest release APK from the [Releases](../../releases/latest) page. In the menu, select `7` and provide the file path. Test launching FireClear from your TV's app drawer to confirm normal operation.
 
-Then, on your TV, find FireClear in your app list and **open it to test it** — check that apps launch and Settings tiles work before going further.
+2. **Remove Advertising Services (`Option 1`)**  
+   Select `1` to disable the recommendation and sponsored banner services, Automatic Content Recognition (ACR screen analysis), and usage telemetry.
 
----
+3. **Enable System-Wide Ad-Blocking DNS (`Option 4`)**  
+   Configures encrypted private DNS (AdGuard DNS by default or your preferred provider like Cloudflare/NextDNS). The toolkit performs an automated connectivity handshake; if the DNS host is unreachable, changes are immediately rolled back.
 
-#### 6b. Remove ads and debloat
-Choose **`1` Remove ads only** first.
+4. **Reboot the Device**  
+   Run `adb reboot` from your terminal to allow system caches to settle. Once rebooted, reconnect via `adb connect YOUR_FIRE_TV_IP:5555`.
 
-This is the safest option. It disables:
-- Ad ID and recommendation engines (the banners and autoplay video)
-- Screen-tracking (Automatic Content Recognition / ACR)
-- Telemetry and diagnostics reporting
-- Shopping from the TV
+5. **Set FireClear as Home (`Option 8`)**  
+   Configures your remote's Home button to navigate directly to FireClear.
 
-You'll see `[off]` for each package that was disabled. `[skip]` means that package isn't present on your stick — that's fine.
+6. **Disable Manual Privacy Toggles (On TV Settings)**  
+   Navigate to your Fire TV settings to toggle the final firmware-level analytics switches:
+   - **Settings → Preferences → Privacy Settings:**
+     - *Device Usage Data* → **OFF**
+     - *Collect App Usage Data* → **OFF**
+     - *Interest-based Ads* → **OFF**
+   - **Settings → Preferences → Featured Content:**
+     - *Allow Video Autoplay* → **OFF**
+     - *Allow Audio Autoplay* → **OFF**
 
-> **Want to go further?** Choose `2` (Full debloat) to also disable Alexa notifications, Amazon Photos/Music sync, Kids/FreeTime, and other junk. See [docs/DEBLOAT.md](docs/DEBLOAT.md) for the full list of what gets disabled and why.
-
----
-
-#### 6c. Enable ad-blocking DNS
-Choose **`4` Ad-blocking DNS ON**.
-
-This sets your Fire TV to use AdGuard's DNS, which blocks known ad and tracker domains for **every app on the stick** — not just the home screen.
-
-The tool automatically tests your internet connection after enabling it. **If the internet breaks, it reverts itself automatically.**
-
-> 💡 You can enter a custom DNS hostname if you prefer a different provider (e.g. `1dot1dot1dot1.cloudflare-dns.com` for Cloudflare).
+7. **Re-secure Developer Options**  
+   When your configuration is complete, return to **Settings → My Fire TV → Developer Options** and toggle **ADB Debugging** back to **OFF**.
 
 ---
 
-#### 6d. Reboot the Fire TV
-```bash
-adb reboot
-```
-Wait ~60 seconds, then reconnect:
-```bash
-adb connect YOUR_TV_IP:5555
-```
-Check everything still works normally before the next step.
+## Remote Control Navigation
+
+| Key | Context | Action |
+|---|---|---|
+| **Select / OK** | Any app tile | Launches the selected application |
+| **Menu (☰) or Long-press OK** | Grid app tile | Opens slot assignment dialog (*Pin to Dock Slot 1–4*, *Hide*, *App Info*) |
+| **Menu (☰) or Long-press OK** | Dock tile | Opens dock reordering (*Move Left*, *Move Right*, *Remove*, *App Info*) |
+| **Up** | Dock row | Moves focus to the top status cluster (*Time*, *Wi-Fi*, *Wallpaper*, *Settings*) |
+| **Down** | Dock row | Smoothly glides down into the 5-column installed apps grid |
+| **Up** | Top grid row | Glides smoothly back up to the Dock and top viewport fold |
+| **Home** | Anywhere | Returns to the first tile of the favorites dock |
 
 ---
 
-#### 6e. Set FireClear as the Home screen
-Choose **`8` Set FireClear as Home**.
+## ↩️ Rollback & Restoration
 
-From now on, pressing the **Home** button on your remote will open FireClear instead of Amazon's ad-filled launcher.
+Every modification made by FireClear is reversible without reinstalling firmware or losing personal app data:
 
-> ⚠️ If the tool says it was refused, use a Home-button remapper app and map the Home button to FireClear manually. See [docs/GUIDE.md#troubleshooting](docs/GUIDE.md#troubleshooting).
-
----
-
-#### 6f. Turn off the last data collection switches (by hand)
-
-These must be toggled manually on the TV — ADB can't do it:
-
-1. **Settings → Preferences → Privacy Settings:**
-   - Device Usage Data → **OFF**
-   - Collect App Usage Data → **OFF**
-   - Interest-based Ads → **OFF**
-
-2. **Settings → Preferences → Featured Content:**
-   - Allow Video Autoplay → **OFF**
-   - Allow Sound Autoplay → **OFF**
-
----
-
-### Step 7 — Lock it down again
-
-Once everything is working, turn off the developer settings you enabled earlier:
-
-On your Fire TV: **Settings → My Fire TV → Developer Options**
-- ADB Debugging → **OFF**
-- Apps from Unknown Sources → **OFF**
-
-Then quit the tool: press **`0`** in the menu.
-
----
-
-## ↩️ How to Undo Everything
-
-Changed your mind? Every single step is reversible:
-
-| What to undo | How |
+| Desired Action | Resolution |
 |---|---|
-| Debloat / ad removal | Run the tool → choose **`6` Undo debloat** |
-| Ad-blocking DNS | Run the tool → choose **`5` Ad-blocking DNS OFF** |
-| Restore Amazon Home | Run the tool → choose **`9` Restore Amazon Home** |
-| Remove FireClear | Standard TV settings → Apps → FireClear → Uninstall |
-| Nuclear option | Factory reset the Fire TV |
+| **Restore All Disabled Packages** | Run toolkit → Choose **`6` Undo debloat** |
+| **Disable Ad-Blocking DNS** | Run toolkit → Choose **`5` Ad-blocking DNS OFF** |
+| **Restore Stock Amazon Home** | Run toolkit → Choose **`9` Restore Amazon Home** |
+| **Uninstall FireClear** | Standard TV Settings → Applications → FireClear → Uninstall |
+| **Full Emergency Factory State** | Fire TV Settings → My Fire TV → Reset to Factory Defaults |
 
 ---
 
-## 🔍 Troubleshooting
+## Security & Verification
 
-<details>
-<summary>ADB says "unauthorized" or connection refused</summary>
+FireClear enforces strict static build guardrails verified via automated CI on every commit:
 
-- Make sure ADB Debugging is ON in Developer Options.
-- A dialog may be waiting on your TV screen — look for *"Allow USB debugging?"* and tap **Always Allow**.
-- Try: `adb kill-server` then `adb connect YOUR_TV_IP:5555` again.
+- **Manifest Audit:** Strictly bounded to `ACCESS_NETWORK_STATE` and `ACCESS_WIFI_STATE`.
+- **Zero Third-Party Code:** No external Maven/Gradle libraries or pre-compiled binaries are committed to the repository.
+- **Source Inspection:** Automated regex validation prohibits reflection, dynamic code class-loaders, WebViews, or background service declarations.
+- **Deterministic Verification:** Run the static audit script locally at any time:
+  ```bash
+  bash scripts/audit.sh
+  ```
 
-</details>
-
-<details>
-<summary>Black screen after setting FireClear as Home</summary>
-
-From any computer on the same Wi-Fi:
-```bash
-adb connect YOUR_TV_IP:5555
-adb shell pm enable --user 0 com.amazon.tv.launcher
-```
-
-</details>
-
-<details>
-<summary>Menu 8 (Set as Home) was refused</summary>
-
-Install a Home-button remapper app (e.g. from the Appstore) and map the Home button to FireClear. See [docs/GUIDE.md#troubleshooting](docs/GUIDE.md#troubleshooting).
-
-</details>
-
-<details>
-<summary>No internet after enabling DNS</summary>
-
-The tool auto-reverts, but if you need to fix it manually:
-```bash
-adb shell settings put global private_dns_mode off
-```
-
-</details>
-
-<details>
-<summary>Casting from my phone stopped working</summary>
-
-Re-enable the casting service:
-```bash
-adb shell pm enable --user 0 com.amazon.whisperplay.contracts
-```
-
-</details>
-
-<details>
-<summary>Amazon updated the stick and the ads came back</summary>
-
-Updates can re-enable packages. Just run the tool again and choose **`1`** (and **`8`** if the home screen reverted too).
-
-</details>
-
-<details>
-<summary>FireClear custom wallpaper</summary>
-
-```bash
-adb push photo.jpg /sdcard/Android/data/app.fireclear.launcher/files/wallpaper.jpg
-```
-Then in FireClear: **Customize → Custom photo**. JPG or PNG, up to 25 MB, 1920×1080 ideal.
-
-</details>
+For a comprehensive review of package safety classifications, refer to [docs/SECURITY.md](docs/SECURITY.md) and [docs/DEBLOAT.md](docs/DEBLOAT.md).
 
 ---
 
-## 🏠 Using the FireClear Launcher
-
-| Action | What it does |
-|---|---|
-| **OK** on an app | Opens it |
-| **Hold OK** on an app | Options: Favourite, Move, Hide, App Info, Uninstall |
-| **Menu (☰) button** on an app | Same as Hold OK |
-| **Up** from the top row | Reaches the top bar: Wi-Fi, Customize, Settings |
-| **Home** while already home | Glides back to the first tile |
-
-**Layout:** 4-App Favorites Dock (Top Shelf) → Apps Grid
-
-**Dock Management:** Hold **OK** or press **Menu (☰)** on any app to pin it to a dock slot (1–4), move it left/right within the dock, or remove it.
-
-**System Settings:** Available at any time via the **Settings** pill in the top status bar (one-click access to full Fire TV settings).
-
-**Customize menu:** 5 built-in wallpapers, Custom photo, Unhide all apps, Animations On/Off.
-
----
-
-## 🔒 Security at a Glance
-
-- **No `INTERNET` permission** — Android blocks all network traffic from the app. It cannot upload anything, ever.
-- **Zero libraries** — no third-party code, no native code, no WebView, no reflection.
-- **CI-audited** — the build pipeline fails if any of this changes. See [`scripts/audit.sh`](scripts/audit.sh).
-- **Tool safety** — the script only runs `adb` commands against the IP you enter, and validates every package name before it reaches the device.
-
-Full threat model: [docs/SECURITY.md](docs/SECURITY.md). Verify yourself in 30 seconds: `bash scripts/audit.sh`.
-
----
-
-## 📦 Latest Release: v2.3
-
-| | |
-|---|---|
-| Version | **2.3** (versionCode 5) — [CHANGELOG](CHANGELOG.md) |
-| Package | `app.fireclear.launcher` |
-| Target device | Fire TV Stick 3rd gen, Fire OS 7 (Android 9) |
-| Android levels | minSdk 25, targetSdk 28 |
-| Permissions | `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE` only |
-| Dependencies | **0** |
-
-**What's new in 2.3:** tvOS-style 4-app Favorites Dock with interactive slot management, white glow focus animations, clutter-free home screen, tool menu with **Remove ads only** and **Ad-blocking DNS on/off** (with automatic rollback), and hardened release workflow.
-
----
-
-## 📁 Repository Layout
+## Project Structure
 
 ```
-app/                  The launcher (Kotlin, zero dependencies)
-tools/                firetv-tool.sh / .bat + package lists
-scripts/              audit.sh, verify-apk.sh (also run in CI)
-docs/                 GUIDE, ADS, BUILD, DEBLOAT, SECURITY
-.github/workflows/    build, release, CodeQL
+├── app/                  # Native Android launcher (Kotlin, zero dependencies)
+│   └── src/main/java/    # Clean architecture UI and rendering pipeline
+├── tools/                # firetv-tool.sh, firetv-tool.bat, and package lists
+├── scripts/              # Static security audit and APK verification scripts
+├── docs/                 # Guides (GUIDE.md, DEBLOAT.md, ADS.md, BUILD.md, SECURITY.md)
+└── .github/workflows/    # CI builds, CodeQL security scanning, and automated releases
 ```
 
 ---
 
-## 🤝 Contributing & License
+## License & Notice
 
-PRs are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). Device reports (model, Fire OS version, what worked or didn't) are especially helpful as GitHub Issues.
+This project is licensed under the [MIT License](LICENSE).
 
-Licensed under [MIT](LICENSE).
-
-> Not affiliated with Amazon or Apple. "tvOS-style" describes the layout only — no Apple assets are used. Disabling system packages is at your own risk; it is unsupported by Amazon but fully reversible.
-
-
+*Disclaimer: FireClear is an independent open-source utility and is not affiliated with, endorsed by, or associated with Amazon.com, Inc. or Apple Inc. Mention of device names or visual styles is for descriptive compatibility purposes only. Modifying installed system packages is performed at the user's discretion.*
