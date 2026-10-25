@@ -1,5 +1,8 @@
 # Changelog
 
+## 4.0.1 - 2026-10-25
+- Automated patch release bump from 4.0.0 (versionCode 12) to 4.0.1 (versionCode 13).
+
 ## 4.0.0 - 2026-10-25
 - Automated major release bump from 3.0.2 (versionCode 11) to 4.0.0 (versionCode 12).
 
