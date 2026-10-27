@@ -1,5 +1,8 @@
 # Changelog
 
+## 6.0.0 - 2026-10-27
+- Automated major release bump from 5.0.1 (versionCode 15) to 6.0.0 (versionCode 16).
+
 ## 5.2.0 - 2026-10-27
 - **Frosted Glass Multi-Pane Architecture & Dual-Target Adaptive UI**:
   - **Zero-GPU Blur Frosted Glass**: Simulated specular refraction borders (25% to 5% alpha) and translucent vertical gradients without costly GPU render effects.
