@@ -1,5 +1,8 @@
 # Changelog
 
+## 6.0.1 - 2026-10-27
+- Automated patch release bump from 6.0.0 (versionCode 16) to 6.0.1 (versionCode 17).
+
 ## 6.0.0 - 2026-10-27
 - Automated major release bump from 5.0.1 (versionCode 15) to 6.0.0 (versionCode 16).
 
