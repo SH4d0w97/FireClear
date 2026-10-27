@@ -1,13 +1,13 @@
 # Changelog
 
 ## 5.2.0 - 2026-10-27
-- **Frosted Glass Multi-Pane Architecture & Dual-Target Adaptive UI**:
-  - **Zero-GPU Blur Frosted Glass**: Simulated specular refraction borders (25% to 5% alpha) and translucent vertical gradients without costly GPU render effects.
-  - **Screen 1 (Home Tab)**: Added responsive Featured Hero Card with vector mountain canvas silhouette, title, description, and action pill buttons (Resume & Details), Continue Watching row with flat progress bars, and Your Favourites row.
-  - **Screen 2 (Apps Tab - 2-Pane Split)**: Added 28% left sidebar featuring real-time search filtering, dynamic category filter pills (All Apps, Streaming, Music, Games, Utilities) with live badge counts, and 72% right adaptive grid with 128x128 icon LRU caching.
-  - **Screen 3 (Settings Tab - 2-Pane Split)**: Added 30% left sidebar with vector category glyphs and 70% right glass panel with persistent preferences (OLED Black / Frosted Slate, Screensaver Timeout, Reduce Motion toggle, Display Brightness gateway, HDR output toggle).
-  - **Top Navigation Bar & Clock**: Centered segmented pill bar (Home, Apps, Settings) with live top-right clock (time & date).
-  - **Back Navigation Guard**: Pressing Back on Apps or Settings seamlessly returns to Home; pressing Back on Home stays on Home without exiting the launcher.
+- **Apple tvOS-Inspired Pure Cinematic Home & Functional Quick Settings**:
+  - **Clean Home Screen (Zero Dummy Content)**: Removed placeholder featured hero card and dummy continue-watching rows. The Home screen now lets the atmospheric wallpaper breathe with prominent hero typography and quick action hints.
+  - **Bottom-Aligned Pinned Dock**: Positioned the 4-app Favorites dock cleanly at the bottom of the screen (48dp bottom margin), eliminating awkward dead space and matching tvOS ergonomics.
+  - **Adaptive Ambient Glow**: Soft, broad radial glow positioned behind the dock that dynamically blooms in the focused app's dominant signature brand color.
+  - **Functional Quick Settings Hub**: Replaced dummy toggle switches with 6 real, functional system preference cards (Network & Wi-Fi, Remotes & Bluetooth, Wallpaper & Style, Applications, Display & Sounds, Device & About) plus a full-width All Settings button that launch actual Android/Fire TV system settings.
+  - **Overflow & Spacing Hardening**: Set clipChildren=false and clipToPadding=false across all containers, ensuring 1.05x tile elevation and focus rings never clip or glitch.
+  - **Top Bar Alignment**: Balanced top-left clock/date, strictly centered floating glass pill (Favourites, All Apps, Settings), and interactive top-right Wi-Fi pill.
 
 ## 5.0.1 - 2026-10-25
 - Automated patch release bump from 5.0.0 (versionCode 14) to 5.0.1 (versionCode 15).
