@@ -1,5 +1,14 @@
 # Changelog
 
+## 5.2.0 - 2026-10-27
+- **Frosted Glass Multi-Pane Architecture & Dual-Target Adaptive UI**:
+  - **Zero-GPU Blur Frosted Glass**: Simulated specular refraction borders (25% to 5% alpha) and translucent vertical gradients without costly GPU render effects.
+  - **Screen 1 (Home Tab)**: Added responsive Featured Hero Card with vector mountain canvas silhouette, title, description, and action pill buttons (Resume & Details), Continue Watching row with flat progress bars, and Your Favourites row.
+  - **Screen 2 (Apps Tab - 2-Pane Split)**: Added 28% left sidebar featuring real-time search filtering, dynamic category filter pills (All Apps, Streaming, Music, Games, Utilities) with live badge counts, and 72% right adaptive grid with 128x128 icon LRU caching.
+  - **Screen 3 (Settings Tab - 2-Pane Split)**: Added 30% left sidebar with vector category glyphs and 70% right glass panel with persistent preferences (OLED Black / Frosted Slate, Screensaver Timeout, Reduce Motion toggle, Display Brightness gateway, HDR output toggle).
+  - **Top Navigation Bar & Clock**: Centered segmented pill bar (Home, Apps, Settings) with live top-right clock (time & date).
+  - **Back Navigation Guard**: Pressing Back on Apps or Settings seamlessly returns to Home; pressing Back on Home stays on Home without exiting the launcher.
+
 ## 5.0.1 - 2026-10-25
 - Automated patch release bump from 5.0.0 (versionCode 14) to 5.0.1 (versionCode 15).
 

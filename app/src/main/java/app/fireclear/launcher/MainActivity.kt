@@ -1,37 +1,39 @@
 package app.fireclear.launcher
 
-import android.animation.ArgbEvaluator
 import android.animation.ValueAnimator
 import android.app.Activity
-import android.app.AlertDialog
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
 import android.content.pm.ResolveInfo
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.BitmapShader
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.LinearGradient
 import android.graphics.Outline
 import android.graphics.Paint
 import android.graphics.Path
-import android.graphics.RadialGradient
 import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
 import android.net.wifi.WifiManager
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.text.Editable
+import android.text.InputType
+import android.text.TextWatcher
 import android.util.LruCache
 import android.util.TypedValue
 import android.view.Gravity
@@ -39,103 +41,257 @@ import android.view.KeyEvent
 import android.view.View
 import android.view.ViewOutlineProvider
 import android.view.animation.DecelerateInterpolator
+import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.RelativeLayout
 import android.widget.ScrollView
-import android.widget.TextClock
 import android.widget.TextView
 import android.widget.Toast
-import java.io.File
-import java.util.Collections
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.Executors
 
-/** Custom wallpapers above this size are ignored. */
-private const val MAX_WALLPAPER_BYTES = 25L * 1024 * 1024
+// ─────────────────────────────────────────────────────────────────────────────
+// Design System Tokens (Frosted Glass / Midnight Slate / OLED Black)
+// ─────────────────────────────────────────────────────────────────────────────
+private const val COLOR_MIDNIGHT_START  = 0xFF0F121C.toInt()
+private const val COLOR_MIDNIGHT_END    = 0xFF1B2030.toInt()
+private const val COLOR_OLED_BLACK      = 0xFF000000.toInt()
 
-/** Constant count of apps in the Home screen pinned dock. */
-private const val DOCK_SLOT_COUNT = 4
+private const val COLOR_TEXT_PRIMARY    = 0xFFFFFFFF.toInt()
+private const val COLOR_TEXT_SECONDARY  = 0xFF94A3B8.toInt()
+private const val COLOR_TEXT_MUTED      = 0xFF64748B.toInt()
+private const val COLOR_PILL_ACTIVE_TEXT = 0xFF0F121C.toInt()
+private const val COLOR_FOCUS_RING      = 0xFFE2E8F0.toInt()
 
-/** Apps per row in the All Apps grid. */
-private const val APPS_PER_ROW = 5
+private const val GLASS_SURFACE_TOP     = 0x1AFFFFFF // 10% white
+private const val GLASS_SURFACE_BOTTOM  = 0x0DFFFFFF // 5% white
+private const val GLASS_BORDER_TOP      = 0x40FFFFFF // 25% white specular
+private const val GLASS_BORDER_BOTTOM   = 0x0DFFFFFF // 5% white
 
-// ───────────────────────── Smart TV Launcher Design Tokens ─────────────────────────
-private const val COLOR_MIDNIGHT_BLACK = 0xFF080C14.toInt() // #080C14 (Deep Midnight Navy base)
-private const val COLOR_SMOKY_CHARCOAL = 0xFF1B222D.toInt() // #1B222D (Frosted Charcoal surface)
-private const val COLOR_SOFT_WHITE     = 0xFFFFFFFF.toInt() // #FFFFFF (Crisp Soft White)
-private const val COLOR_COOL_GRAY      = 0xFFB4BFCD.toInt() // #B4BFCD (Cool Slate Gray secondary)
-private const val COLOR_MUTED_BLUE     = 0xFF4D6D85.toInt() // #4D6D85 (Ambient Blue fallback)
-private const val COLOR_TEXT_DARK      = 0xFF0E131A.toInt() // #0E131A (Ink Dark for white surfaces)
+// ─────────────────────────────────────────────────────────────────────────────
+// Custom Low-Overhead Views & Containers
+// ─────────────────────────────────────────────────────────────────────────────
 
-/** Smooth vertical scroll view that never jumps on focus. */
+/** Smooth vertical scroll view that does not auto-jump abruptly on focus. */
 private class CalmVScroll(c: Context) : ScrollView(c) {
-    init { overScrollMode = View.OVER_SCROLL_NEVER }
+    init {
+        overScrollMode = View.OVER_SCROLL_NEVER
+        isVerticalScrollBarEnabled = false
+    }
     override fun computeScrollDeltaToGetChildRectOnScreen(rect: Rect?): Int = 0
 }
 
-/**
- * Subtle contrast gradient near the top and bottom to keep text, header,
- * and app tiles readable over any full-screen wallpaper.
- */
-private class ContrastGradientView(c: Context) : View(c) {
-    private val pTop = Paint()
-    private val pBottom = Paint()
-
-    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
-        super.onSizeChanged(w, h, oldw, oldh)
-        val hF = h.toFloat()
-        val wF = w.toFloat()
-        pTop.shader = LinearGradient(
-            0f, 0f, 0f, hF * 0.30f,
-            0x88080C14.toInt(), Color.TRANSPARENT,
-            Shader.TileMode.CLAMP
-        )
-        pBottom.shader = LinearGradient(
-            0f, hF * 0.44f, 0f, hF,
-            Color.TRANSPARENT, 0x99080C14.toInt(),
-            Shader.TileMode.CLAMP
-        )
+/** Smooth horizontal scroll view without focus jumping. */
+private class CalmHScroll(c: Context) : HorizontalScrollView(c) {
+    init {
+        overScrollMode = View.OVER_SCROLL_NEVER
+        isHorizontalScrollBarEnabled = false
     }
+    override fun computeScrollDeltaToGetChildRectOnScreen(rect: Rect?): Int = 0
+}
+
+/** Lightweight vector mountain silhouette canvas graphic for Featured Hero Card. */
+private class MountainGraphicView(c: Context) : View(c) {
+    private val pSilhouette = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = 0x24FFFFFF
+    }
+    private val pMoon = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = 0x38FFFFFF
+    }
+    private val path = Path()
 
     override fun onDraw(cv: Canvas) {
-        val wF = width.toFloat()
-        val hF = height.toFloat()
-        cv.drawRect(0f, 0f, wF, hF * 0.30f, pTop)
-        cv.drawRect(0f, hF * 0.44f, wF, hF, pBottom)
+        val w = width.toFloat()
+        val h = height.toFloat()
+        if (w <= 0 || h <= 0) return
+
+        path.reset()
+        path.moveTo(0f, h)
+        path.lineTo(w * 0.22f, h * 0.38f)
+        path.lineTo(w * 0.44f, h * 0.68f)
+        path.lineTo(w * 0.70f, h * 0.22f)
+        path.lineTo(w, h * 0.74f)
+        path.lineTo(w, h)
+        path.close()
+        cv.drawPath(path, pSilhouette)
+
+        // Subtle glowing moon
+        val radius = h * 0.14f
+        cv.drawCircle(w * 0.82f, h * 0.32f, radius, pMoon)
     }
 }
 
-/**
- * Broad, soft, low-opacity adaptive ambient glow near the bottom dock,
- * smoothly tinted by the currently focused app.
- */
-private class AmbientBloomView(c: Context) : View(c) {
-    var ambientColor: Int = Color.TRANSPARENT
+/** Flat 4dp horizontal progress bar for Continue Watching row. */
+private class FlatProgressView(c: Context) : View(c) {
+    var progress: Float = 0f
+        set(v) {
+            field = v.coerceIn(0f, 1f)
+            invalidate()
+        }
+    private val pTrack = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0x24FFFFFF
+        style = Paint.Style.FILL
+    }
+    private val pFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = COLOR_TEXT_PRIMARY
+        style = Paint.Style.FILL
+    }
+
+    override fun onDraw(cv: Canvas) {
+        val w = width.toFloat()
+        val h = height.toFloat()
+        val r = h / 2f
+        cv.drawRoundRect(RectF(0f, 0f, w, h), r, r, pTrack)
+        if (progress > 0f) {
+            cv.drawRoundRect(RectF(0f, 0f, w * progress, h), r, r, pFill)
+        }
+    }
+}
+
+/** Custom tvOS-style lightweight pill switch. */
+private class GlassSwitchView(c: Context) : View(c) {
+    var isChecked: Boolean = false
         set(v) {
             if (field != v) {
                 field = v
                 invalidate()
             }
         }
-    private val p = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val pTrack = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val pThumb = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = COLOR_TEXT_PRIMARY
+    }
 
     override fun onDraw(cv: Canvas) {
-        if (ambientColor == Color.TRANSPARENT || Color.alpha(ambientColor) == 0) return
         val w = width.toFloat()
         val h = height.toFloat()
-        val cr = Color.red(ambientColor)
-        val cg = Color.green(ambientColor)
-        val cb = Color.blue(ambientColor)
-        p.shader = RadialGradient(
-            w * 0.5f, h * 0.68f, w * 0.60f,
-            intArrayOf(Color.argb(55, cr, cg, cb), Color.argb(18, cr, cg, cb), Color.TRANSPARENT),
-            floatArrayOf(0f, 0.45f, 1f),
-            Shader.TileMode.CLAMP
-        )
-        cv.drawRect(0f, 0f, w, h, p)
+        val r = h / 2f
+
+        pTrack.color = if (isChecked) 0x66FFFFFF else 0x1EFFFFFF
+        cv.drawRoundRect(RectF(0f, 0f, w, h), r, r, pTrack)
+
+        val thumbRadius = (h - 8f) / 2f
+        val thumbX = if (isChecked) (w - thumbRadius - 4f) else (thumbRadius + 4f)
+        val thumbY = h / 2f
+        cv.drawCircle(thumbX, thumbY, thumbRadius, pThumb)
     }
 }
+
+/** Clean line vector glyphs for settings categories and system icons. */
+private class GlyphView(c: Context, private val type: Int) : View(c) {
+    companion object {
+        const val TYPE_DISPLAY    = 1
+        const val TYPE_NAVIGATION = 2
+        const val TYPE_HOME       = 3
+        const val TYPE_PRIVACY    = 4
+        const val TYPE_SYSTEM     = 5
+        const val TYPE_SEARCH     = 6
+    }
+
+    var dark = false
+    private val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+    }
+
+    override fun onDraw(cv: Canvas) {
+        val w = width.toFloat()
+        val h = height.toFloat()
+        val col = if (dark) COLOR_PILL_ACTIVE_TEXT else COLOR_TEXT_PRIMARY
+        p.color = col
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = w * 0.09f
+
+        when (type) {
+            TYPE_DISPLAY -> {
+                cv.drawRoundRect(RectF(w * 0.12f, h * 0.15f, w * 0.88f, h * 0.68f), w * 0.08f, w * 0.08f, p)
+                cv.drawLine(w * 0.38f, h * 0.85f, w * 0.62f, h * 0.85f, p)
+                cv.drawLine(w * 0.5f, h * 0.68f, w * 0.5f, h * 0.85f, p)
+            }
+            TYPE_NAVIGATION -> {
+                val path = Path().apply {
+                    moveTo(w * 0.5f, h * 0.12f)
+                    lineTo(w * 0.85f, h * 0.85f)
+                    lineTo(w * 0.5f, h * 0.68f)
+                    lineTo(w * 0.15f, h * 0.85f)
+                    close()
+                }
+                cv.drawPath(path, p)
+            }
+            TYPE_HOME -> {
+                val path = Path().apply {
+                    moveTo(w * 0.5f, h * 0.15f)
+                    lineTo(w * 0.85f, h * 0.45f)
+                    lineTo(w * 0.85f, h * 0.85f)
+                    lineTo(w * 0.15f, h * 0.85f)
+                    lineTo(w * 0.15f, h * 0.45f)
+                    close()
+                }
+                cv.drawPath(path, p)
+                cv.drawLine(w * 0.40f, h * 0.85f, w * 0.40f, h * 0.60f, p)
+                cv.drawLine(w * 0.60f, h * 0.85f, w * 0.60f, h * 0.60f, p)
+                cv.drawLine(w * 0.40f, h * 0.60f, w * 0.60f, h * 0.60f, p)
+            }
+            TYPE_PRIVACY -> {
+                cv.drawRoundRect(RectF(w * 0.20f, h * 0.42f, w * 0.80f, h * 0.85f), w * 0.08f, w * 0.08f, p)
+                val arc = RectF(w * 0.32f, h * 0.15f, w * 0.68f, h * 0.50f)
+                cv.drawArc(arc, 180f, 180f, false, p)
+            }
+            TYPE_SYSTEM -> {
+                cv.drawCircle(w * 0.5f, h * 0.5f, w * 0.22f, p)
+                for (angle in 0 until 360 step 45) {
+                    val rad = Math.toRadians(angle.toDouble())
+                    val x1 = (w * 0.5f + Math.cos(rad) * w * 0.30f).toFloat()
+                    val y1 = (h * 0.5f + Math.sin(rad) * h * 0.30f).toFloat()
+                    val x2 = (w * 0.5f + Math.cos(rad) * w * 0.42f).toFloat()
+                    val y2 = (h * 0.5f + Math.sin(rad) * h * 0.42f).toFloat()
+                    cv.drawLine(x1, y1, x2, y2, p)
+                }
+            }
+            TYPE_SEARCH -> {
+                cv.drawCircle(w * 0.42f, h * 0.42f, w * 0.24f, p)
+                cv.drawLine(w * 0.60f, h * 0.60f, w * 0.85f, h * 0.85f, p)
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Data Models
+// ─────────────────────────────────────────────────────────────────────────────
+
+private enum class AppCategory(val title: String) {
+    ALL("All Apps"),
+    STREAMING("Streaming"),
+    MUSIC("Music"),
+    GAMES("Games"),
+    UTILITIES("Utilities")
+}
+
+private data class AppModel(
+    val packageName: String,
+    val activityName: String,
+    val label: String,
+    val category: AppCategory,
+    val iconKey: String
+)
+
+private data class MediaItem(
+    val title: String,
+    val remaining: String,
+    val progress: Float
+)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Main Activity
+// ─────────────────────────────────────────────────────────────────────────────
 
 class MainActivity : Activity() {
 
@@ -143,123 +299,107 @@ class MainActivity : Activity() {
     private val worker = Executors.newSingleThreadExecutor()
     private val decel = DecelerateInterpolator(1.8f)
 
-    // 12 MB memory cache for tile bitmaps
-    private val cache = object : LruCache<String, Bitmap>(12 * 1024 * 1024) {
+    // 16 MB memory cache for 128x128 icons
+    private val iconCache = object : LruCache<String, Bitmap>(16 * 1024 * 1024) {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
     }
-    private val colorMap = HashMap<String, Int>()
 
     private lateinit var prefs: SharedPreferences
-    private lateinit var wallpaper: ImageView
-    private lateinit var ambientGlow: AmbientBloomView
+    private lateinit var rootContainer: FrameLayout
 
-    // Top Header & Interactive System Elements
-    private lateinit var wifiPill: LinearLayout
-    private lateinit var wifiIcon: WifiView
-    private lateinit var wifiText: TextView
+    // Top Navigation Bar
     private lateinit var navPillContainer: LinearLayout
-    private lateinit var tabFavourites: TextView
-    private lateinit var tabAllApps: TextView
+    private lateinit var tabHome: TextView
+    private lateinit var tabApps: TextView
     private lateinit var tabSettings: TextView
-    private var activeTab = 0 // 0 = Favourites, 1 = All Apps, 2 = Settings
+    private lateinit var timeClock: TextView
+    private lateinit var dateClock: TextView
+    private var activeTab = 0 // 0 = Home, 1 = Apps, 2 = Settings
 
     // Content Containers
     private lateinit var viewContainer: FrameLayout
-    private lateinit var viewFavourites: FrameLayout
-    private lateinit var viewAllApps: CalmVScroll
-    private lateinit var allAppsContent: LinearLayout
-    private lateinit var viewSettings: FrameLayout
+    private lateinit var viewHome: CalmVScroll
+    private lateinit var homeContent: LinearLayout
+    private lateinit var viewApps: LinearLayout
+    private lateinit var viewSettings: LinearLayout
 
-    // Hero Showcase elements on Favourites screen
-    private lateinit var heroLayout: LinearLayout
-    private lateinit var heroTitle: TextView
-    private lateinit var heroSubtitle: TextView
-    private lateinit var heroHint: TextView
+    // State Variables
+    private var reduceMotion = false
+    private var appearanceTheme = "Frosted Slate" // "Frosted Slate" or "OLED Black"
+    private var screensaverTimeout = "15 minutes"
+    private var hdrEnabled = true
 
-    private var ambientAnim: ValueAnimator? = null
-    private var currentAmbient = Color.TRANSPARENT
-    private var targetAmbient = Color.TRANSPARENT
+    // Apps Screen State
+    private var allApps: List<AppModel> = emptyList()
+    private var filteredApps: List<AppModel> = emptyList()
+    private var selectedCategory = AppCategory.ALL
+    private var searchQuery = ""
+    private lateinit var appsGridContainer: LinearLayout
+    private val categoryPills = mutableMapOf<AppCategory, View>()
+    private val categoryBadgeViews = mutableMapOf<AppCategory, TextView>()
 
-    private var signature = ""
-    private var appSig = ""
-    private var wifiState = ""
-    private var wifiSsid = "Connected"
-    private var reduce = false
+    // Settings Screen State
+    private var selectedSettingCat = "Display"
+    private lateinit var settingsRowsContainer: LinearLayout
 
-    private val tick = object : Runnable {
-        override fun run() { refreshWifi(); ui.postDelayed(this, 10000) }
+    private val clockTick = object : Runnable {
+        override fun run() {
+            updateClock()
+            ui.postDelayed(this, 1000)
+        }
     }
 
-    private val presets = listOf(
-        "Cosmos" to intArrayOf(0xFF070A10.toInt(), 0xFF0E1526.toInt(), 0xFF191D3A.toInt()),
-        "Pacific" to intArrayOf(0xFF030D16.toInt(), 0xFF082536.toInt(), 0xFF0E4A4C.toInt()),
-        "Aurora" to intArrayOf(0xFF030E0B.toInt(), 0xFF09241B.toInt(), 0xFF154432.toInt()),
-        "Sunset" to intArrayOf(0xFF100714.toInt(), 0xFF3D1330.toInt(), 0xFF7A2E2A.toInt()),
-        "Slate" to intArrayOf(0xFF080A0E.toInt(), 0xFF12151C.toInt(), 0xFF1E232E.toInt())
-    )
+    private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+    private fun dp(v: Float): Int = (v * resources.displayMetrics.density).toInt()
+    private fun ms(v: Long): Long = if (reduceMotion) 0L else v
 
-    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
-    private fun dp(v: Float) = (v * resources.displayMetrics.density).toInt()
-    private fun ms(v: Long) = if (reduce) 0L else v
-
-    // ───────────────────────── Lifecycle ─────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
+    // Lifecycle
+    // ─────────────────────────────────────────────────────────────────────────
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        prefs = getSharedPreferences("launcher", MODE_PRIVATE)
-        reduce = prefs.getBoolean("reduce", false)
-        getExternalFilesDir(null)
+        prefs = getSharedPreferences("launcher_settings", MODE_PRIVATE)
+        loadSettings()
 
         applyImmersiveMode()
 
-        val root = FrameLayout(this)
+        rootContainer = FrameLayout(this)
+        applyRootBackground()
 
-        // 1. Full-screen Edge-to-Edge Wallpaper
-        wallpaper = ImageView(this).apply { scaleType = ImageView.ScaleType.FIT_XY }
-        root.addView(wallpaper, FrameLayout.LayoutParams(-1, -1))
-
-        // 2. Subtle Contrast Gradients (Top & Bottom for text/tile legibility)
-        root.addView(ContrastGradientView(this), FrameLayout.LayoutParams(-1, -1))
-
-        // 3. Adaptive Ambient Glow Layer (Tinted by focused app)
-        ambientGlow = AmbientBloomView(this)
-        root.addView(ambientGlow, FrameLayout.LayoutParams(-1, -1))
-
-        // 4. Main Page Structure (Header + View Container)
-        val mainPage = LinearLayout(this).apply {
+        val mainLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             clipChildren = false
             clipToPadding = false
         }
 
-        // Header bar with independently centered navigation pill and interactive Wi-Fi pill
-        mainPage.addView(createHeaderBar())
+        // 1. Top Navigation Bar with Centered Pill & Live Clock
+        mainLayout.addView(createTopNavigationBar())
 
-        // Content Area Switcher
+        // 2. Main Multi-Screen Content Container
         viewContainer = FrameLayout(this).apply {
             clipChildren = false
             clipToPadding = false
         }
-        mainPage.addView(viewContainer, LinearLayout.LayoutParams(-1, 0, 1f))
+        mainLayout.addView(viewContainer, LinearLayout.LayoutParams(-1, 0, 1f))
 
-        root.addView(mainPage, FrameLayout.LayoutParams(-1, -1))
-        setContentView(root)
+        rootContainer.addView(mainLayout, FrameLayout.LayoutParams(-1, -1))
+        setContentView(rootContainer)
         window.setBackgroundDrawable(null)
 
-        applyWallpaper()
-        setupViews()
+        setupScreens()
+        loadInstalledApps()
     }
 
     override fun onResume() {
         super.onResume()
         applyImmersiveMode()
-        refresh()
-        ui.post(tick)
+        ui.post(clockTick)
     }
 
     override fun onPause() {
         super.onPause()
-        ui.removeCallbacks(tick)
+        ui.removeCallbacks(clockTick)
     }
 
     override fun onDestroy() {
@@ -272,17 +412,7 @@ class MainActivity : Activity() {
         if (hasFocus) applyImmersiveMode()
     }
 
-    override fun onNewIntent(intent: Intent?) {
-        super.onNewIntent(intent)
-        selectTab(0, requestContentFocus = true)
-    }
-
-    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        if (keyCode == KeyEvent.KEYCODE_MENU) { currentFocus?.performLongClick(); return true }
-        return super.onKeyDown(keyCode, event)
-    }
-
-    @Deprecated("Home screen: Back does nothing")
+    @Deprecated("Back navigation returns to Home, or stays on Home")
     override fun onBackPressed() {
         if (activeTab != 0) {
             selectTab(0, requestContentFocus = true)
@@ -301,59 +431,80 @@ class MainActivity : Activity() {
         )
     }
 
-    // ───────────────────────── Header & Centered Glass Pill ─────────────────────────
+    private fun loadSettings() {
+        reduceMotion = prefs.getBoolean("reduce_motion", false)
+        appearanceTheme = prefs.getString("appearance_theme", "Frosted Slate") ?: "Frosted Slate"
+        screensaverTimeout = prefs.getString("screensaver_timeout", "15 minutes") ?: "15 minutes"
+        hdrEnabled = prefs.getBoolean("hdr_enabled", true)
+    }
 
-    private fun createHeaderBar(): View {
+    private fun applyRootBackground() {
+        if (appearanceTheme == "OLED Black") {
+            rootContainer.setBackgroundColor(COLOR_OLED_BLACK)
+        } else {
+            val bg = GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(COLOR_MIDNIGHT_START, COLOR_MIDNIGHT_END)
+            )
+            rootContainer.background = bg
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Top Navigation Bar (Centered Segmented Pill + Live Clock)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private fun createTopNavigationBar(): View {
         val header = RelativeLayout(this).apply {
-            setPadding(dp(48), dp(22), dp(48), dp(4))
+            setPadding(dp(48), dp(20), dp(48), dp(12))
             clipChildren = false
             clipToPadding = false
         }
 
-        // Clock on Top-Left (No container, quiet typography)
+        // Live Clock (Top-Right)
         val clockLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
+            gravity = Gravity.END
             id = View.generateViewId()
         }
-        val timeV = TextClock(this).apply {
-            format12Hour = "h:mm"; format24Hour = "HH:mm"
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 27f)
-            setTextColor(COLOR_SOFT_WHITE)
+        timeClock = TextView(this).apply {
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
+            setTextColor(COLOR_TEXT_PRIMARY)
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         }
-        val dateV = TextClock(this).apply {
-            format12Hour = "EEEE, d MMMM"; format24Hour = "EEEE, d MMMM"
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-            setTextColor(COLOR_COOL_GRAY)
+        dateClock = TextView(this).apply {
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+            setTextColor(COLOR_TEXT_SECONDARY)
             setPadding(0, dp(1), 0, 0)
         }
-        clockLayout.addView(timeV)
-        clockLayout.addView(dateV)
+        clockLayout.addView(timeClock)
+        clockLayout.addView(dateClock)
+        updateClock()
 
         val clockLp = RelativeLayout.LayoutParams(-2, -2).apply {
-            addRule(RelativeLayout.ALIGN_PARENT_LEFT)
+            addRule(RelativeLayout.ALIGN_PARENT_RIGHT)
             addRule(RelativeLayout.CENTER_VERTICAL)
         }
         header.addView(clockLayout, clockLp)
 
-        // Floating Glass Navigation Pill — Strictly Centered Horizontally
+        // Centered Segmented Glass Pill Bar (Home, Apps, Settings)
         navPillContainer = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(4), dp(4), dp(4), dp(4))
             background = GradientDrawable().apply {
                 cornerRadius = dp(24).toFloat()
-                setColor(0x991B222D.toInt()) // Smoky charcoal (~60% opacity)
-                setStroke(dp(1), 0x20FFFFFF) // Fine translucent border
+                setColor(0x18FFFFFF) // Simulated glass
+                setStroke(dp(1), 0x2AFFFFFF) // Specular border
             }
         }
 
-        tabFavourites = createPillTab("Favourites", 0)
-        tabAllApps = createPillTab("All Apps", 1)
+        tabHome = createPillTab("Home", 0)
+        tabApps = createPillTab("Apps", 1)
         tabSettings = createPillTab("Settings", 2)
 
-        navPillContainer.addView(tabFavourites)
-        navPillContainer.addView(tabAllApps)
+        navPillContainer.addView(tabHome)
+        navPillContainer.addView(tabApps)
         navPillContainer.addView(tabSettings)
 
         val navLp = RelativeLayout.LayoutParams(-2, -2).apply {
@@ -362,59 +513,22 @@ class MainActivity : Activity() {
         }
         header.addView(navPillContainer, navLp)
 
-        // Interactive Wi-Fi System Pill on Top-Right
-        val wifiBg = GradientDrawable().apply {
-            cornerRadius = dp(20).toFloat()
-            setColor(0x801B222D.toInt())
-            setStroke(dp(1), 0x20FFFFFF)
-        }
-        wifiIcon = WifiView(this)
-        wifiText = TextView(this).apply {
-            text = "Wi-Fi"
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            setTextColor(COLOR_SOFT_WHITE)
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        }
-
-        wifiPill = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(14), dp(6), dp(16), dp(6))
-            background = wifiBg
-            isFocusable = true
-            isClickable = true
-            addView(wifiIcon, LinearLayout.LayoutParams(dp(18), dp(14)).apply { rightMargin = dp(8) })
-            addView(wifiText)
-
-            setOnFocusChangeListener { v, f ->
-                wifiBg.setColor(if (f) COLOR_SOFT_WHITE else 0x801B222D.toInt())
-                wifiBg.setStroke(dp(1), if (f) COLOR_SOFT_WHITE else 0x20FFFFFF)
-                wifiText.setTextColor(if (f) COLOR_TEXT_DARK else COLOR_SOFT_WHITE)
-                wifiIcon.dark = f
-                wifiIcon.invalidate()
-                v.animate().scaleX(if (f) 1.04f else 1f).scaleY(if (f) 1.04f else 1f)
-                    .setInterpolator(decel).setDuration(ms(180)).start()
-                if (f) transitionAmbient(COLOR_MUTED_BLUE)
-            }
-            setOnClickListener {
-                openSettings(Settings.ACTION_WIFI_SETTINGS)
-            }
-        }
-
-        val sysLp = RelativeLayout.LayoutParams(-2, -2).apply {
-            addRule(RelativeLayout.ALIGN_PARENT_RIGHT)
-            addRule(RelativeLayout.CENTER_VERTICAL)
-        }
-        header.addView(wifiPill, sysLp)
-
         return header
+    }
+
+    private fun updateClock() {
+        val now = Date()
+        val timeFmt = SimpleDateFormat("h:mm a", Locale.getDefault())
+        val dateFmt = SimpleDateFormat("EEE, dd MMM", Locale.getDefault())
+        timeClock.text = timeFmt.format(now)
+        dateClock.text = dateFmt.format(now)
     }
 
     private fun createPillTab(title: String, index: Int): TextView {
         return TextView(this).apply {
             text = title
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-            setPadding(dp(18), dp(7), dp(18), dp(7))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f)
+            setPadding(dp(22), dp(8), dp(22), dp(8))
             gravity = Gravity.CENTER
             isFocusable = true
             isClickable = true
@@ -423,10 +537,11 @@ class MainActivity : Activity() {
             setOnFocusChangeListener { v, hasFocus ->
                 if (hasFocus) {
                     selectTab(index, requestContentFocus = false)
-                    transitionAmbient(COLOR_MUTED_BLUE)
                 }
-                v.animate().scaleX(if (hasFocus) 1.03f else 1f).scaleY(if (hasFocus) 1.03f else 1f)
-                    .setInterpolator(decel).setDuration(ms(180)).start()
+                if (!reduceMotion) {
+                    v.animate().scaleX(if (hasFocus) 1.03f else 1f).scaleY(if (hasFocus) 1.03f else 1f)
+                        .setInterpolator(decel).setDuration(ms(150)).start()
+                }
             }
             setOnClickListener {
                 selectTab(index, requestContentFocus = true)
@@ -438,32 +553,32 @@ class MainActivity : Activity() {
         activeTab = index
         updatePillTabsStyle()
 
-        viewFavourites.visibility = if (index == 0) View.VISIBLE else View.GONE
-        viewAllApps.visibility = if (index == 1) View.VISIBLE else View.GONE
+        viewHome.visibility = if (index == 0) View.VISIBLE else View.GONE
+        viewApps.visibility = if (index == 1) View.VISIBLE else View.GONE
         viewSettings.visibility = if (index == 2) View.VISIBLE else View.GONE
 
         if (requestContentFocus) {
             when (index) {
-                0 -> findFirstFocusable(viewFavourites)?.requestFocus()
-                1 -> findFirstFocusable(viewAllApps)?.requestFocus()
+                0 -> findFirstFocusable(viewHome)?.requestFocus()
+                1 -> findFirstFocusable(viewApps)?.requestFocus()
                 2 -> findFirstFocusable(viewSettings)?.requestFocus()
             }
         }
     }
 
     private fun updatePillTabsStyle() {
-        val tabs = listOf(tabFavourites, tabAllApps, tabSettings)
+        val tabs = listOf(tabHome, tabApps, tabSettings)
         tabs.forEachIndexed { i, tv ->
             val isActive = (i == activeTab)
             if (isActive) {
                 tv.background = GradientDrawable().apply {
                     cornerRadius = dp(20).toFloat()
-                    setColor(COLOR_SOFT_WHITE)
+                    setColor(COLOR_TEXT_PRIMARY)
                 }
-                tv.setTextColor(COLOR_TEXT_DARK)
+                tv.setTextColor(COLOR_PILL_ACTIVE_TEXT)
             } else {
                 tv.background = null
-                tv.setTextColor(0xFFCBD5E1.toInt())
+                tv.setTextColor(COLOR_TEXT_SECONDARY)
             }
         }
     }
@@ -480,1046 +595,973 @@ class MainActivity : Activity() {
         return null
     }
 
-    // ───────────────────────── Views Setup ─────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
+    // Glass Surface Helper (Low GPU Overhead)
+    // ─────────────────────────────────────────────────────────────────────────
 
-    private fun setupViews() {
+    private fun createFrostedCardDrawable(rDp: Float = 16f): GradientDrawable {
+        return GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(GLASS_SURFACE_TOP, GLASS_SURFACE_BOTTOM)
+        ).apply {
+            cornerRadius = dp(rDp).toFloat()
+            setStroke(dp(1), GLASS_BORDER_TOP)
+        }
+    }
+
+    private fun applyFrostedFocus(v: View, bg: GradientDrawable, hasFocus: Boolean, targetScale: Float = 1.04f) {
+        if (hasFocus) {
+            if (reduceMotion) {
+                bg.setStroke(dp(2), COLOR_FOCUS_RING)
+                v.scaleX = 1f
+                v.scaleY = 1f
+            } else {
+                bg.setStroke(dp(1.8f), COLOR_TEXT_PRIMARY)
+                v.animate().scaleX(targetScale).scaleY(targetScale)
+                    .setInterpolator(decel).setDuration(ms(150)).start()
+            }
+        } else {
+            bg.setStroke(dp(1), GLASS_BORDER_TOP)
+            if (!reduceMotion) {
+                v.animate().scaleX(1f).scaleY(1f)
+                    .setInterpolator(decel).setDuration(ms(150)).start()
+            } else {
+                v.scaleX = 1f
+                v.scaleY = 1f
+            }
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Screens Setup
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private fun setupScreens() {
         viewContainer.removeAllViews()
 
-        // 1. Favourites View (Hero Header + 4-app pinned dock)
-        viewFavourites = FrameLayout(this).apply {
-            clipChildren = false
-            clipToPadding = false
-        }
-        viewContainer.addView(viewFavourites, FrameLayout.LayoutParams(-1, -1))
-
-        // 2. All Apps View (Categorized / 5-column grid)
-        allAppsContent = LinearLayout(this).apply {
+        // 1. Home Tab Screen (Scrollable)
+        homeContent = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(dp(48), dp(10), dp(48), dp(48))
             clipChildren = false
             clipToPadding = false
-            setPadding(0, dp(14), 0, dp(64))
         }
-        viewAllApps = CalmVScroll(this).apply {
-            isVerticalScrollBarEnabled = false
+        viewHome = CalmVScroll(this).apply {
+            addView(homeContent, FrameLayout.LayoutParams(-1, -2))
+        }
+        viewContainer.addView(viewHome, FrameLayout.LayoutParams(-1, -1))
+
+        // 2. Apps Tab Screen (2-Pane Split: Left Sidebar 28%, Right Grid 72%)
+        viewApps = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(48), dp(10), dp(48), dp(32))
             clipChildren = false
             clipToPadding = false
             visibility = View.GONE
-            addView(allAppsContent)
         }
-        viewContainer.addView(viewAllApps, FrameLayout.LayoutParams(-1, -1))
+        viewContainer.addView(viewApps, FrameLayout.LayoutParams(-1, -1))
 
-        // 3. Settings View (Quick Settings grid + All Settings card)
-        viewSettings = FrameLayout(this).apply {
+        // 3. Settings Tab Screen (2-Pane Split: Left Sidebar 30%, Right Panel 70%)
+        viewSettings = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(48), dp(10), dp(48), dp(32))
             clipChildren = false
             clipToPadding = false
             visibility = View.GONE
         }
         viewContainer.addView(viewSettings, FrameLayout.LayoutParams(-1, -1))
 
-        rebuildSettingsView()
+        buildHomeScreen()
+        buildAppsScreen()
+        buildSettingsScreen()
         updatePillTabsStyle()
     }
 
-    private fun loadApps(): List<ResolveInfo> {
-        val pm = packageManager
-        fun q(cat: String) = pm.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(cat), 0)
-        return (q(Intent.CATEGORY_LEANBACK_LAUNCHER) + q(Intent.CATEGORY_LAUNCHER))
-            .filter { it.activityInfo.packageName != packageName }
-            .distinctBy { it.activityInfo.packageName }
-            .sortedBy { it.loadLabel(pm).toString().lowercase() }
-    }
+    // ─────────────────────────────────────────────────────────────────────────
+    // Screen 1: Home Tab
+    // ─────────────────────────────────────────────────────────────────────────
 
-    private fun list(k: String): List<String> =
-        (prefs.getString(k, "") ?: "").split("\n").filter { it.isNotEmpty() }
+    private fun buildHomeScreen() {
+        homeContent.removeAllViews()
 
-    private fun save(k: String, l: List<String>) {
-        prefs.edit().putString(k, l.joinToString("\n")).apply()
-    }
-
-    private fun getDockPackages(all: List<ResolveInfo>): List<String> {
-        val hidden = prefs.getStringSet("hidden", emptySet<String>()) ?: emptySet()
-        val byPkg = all.associateBy { it.activityInfo.packageName }
-        val explicit = list("fav").filter { it in byPkg && it !in hidden }.distinct().toMutableList()
-
-        for (app in all) {
-            if (explicit.size >= DOCK_SLOT_COUNT) break
-            val pkg = app.activityInfo.packageName
-            if (pkg !in explicit && pkg !in hidden) {
-                explicit.add(pkg)
-            }
-        }
-        return explicit.take(DOCK_SLOT_COUNT)
-    }
-
-    private fun currentSig(a: String) =
-        a + "|" + prefs.getString("fav", "") + "|" + prefs.getString("rec", "") + "|" +
-            prefs.getStringSet("hidden", emptySet<String>()).toString()
-
-    private fun refresh() {
-        val all = loadApps()
-        val aSig = all.joinToString(",") { it.activityInfo.packageName }
-        if (aSig != appSig) { appSig = aSig; cache.evictAll(); colorMap.clear() }
-        if (currentSig(aSig) != signature) rebuildAppViews(all)
-    }
-
-    // ───────────────────────── App Views Construction ─────────────────────────
-
-    private fun rebuildAppViews(all: List<ResolveInfo> = loadApps()) {
-        val hidden = prefs.getStringSet("hidden", emptySet<String>()) ?: emptySet()
-        val byPkg = all.associateBy { it.activityInfo.packageName }
-
-        val dockPkgs = getDockPackages(all)
-        val dockApps = dockPkgs.mapNotNull { byPkg[it] }
-        val otherApps = all.filter { it.activityInfo.packageName !in hidden && it.activityInfo.packageName !in dockPkgs }
-
-        signature = currentSig(appSig)
-
-        // Screen adaptive measurements
-        val dm = resources.displayMetrics
-        val screenW = dm.widthPixels
-        val contentW = (screenW * 0.84f).toInt()
-
-        // 1. REBUILD FAVOURITES VIEW (Hero Showcase Header + 4-Card Dock)
-        viewFavourites.removeAllViews()
-
-        // Cinematic Hero Header
-        heroTitle = TextView(this).apply {
-            text = "Favourites"
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 30f)
-            setTextColor(COLOR_SOFT_WHITE)
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        }
-        heroSubtitle = TextView(this).apply {
-            text = "Pinned Applications • Quick Access"
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-            setTextColor(COLOR_COOL_GRAY)
-            setPadding(0, dp(4), 0, 0)
-        }
-        heroHint = TextView(this).apply {
-            text = "Press OK to open • Hold for options"
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
-            setTextColor(0x80B4BFCD.toInt())
-            setPadding(0, dp(6), 0, 0)
-        }
-
-        heroLayout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(48), dp(36), dp(48), 0)
-            addView(heroTitle)
-            addView(heroSubtitle)
-            addView(heroHint)
-        }
-        val heroLp = FrameLayout.LayoutParams(-1, -2).apply {
-            gravity = Gravity.TOP or Gravity.START
-        }
-        viewFavourites.addView(heroLayout, heroLp)
-
-        val dockGap = dp(16)
-        val dockCardW = (contentW - (DOCK_SLOT_COUNT - 1) * dockGap) / DOCK_SLOT_COUNT
-        val dockCardH = (dockCardW * 10 / 16) // 16:10 landscape rectangle
-        val dockCardR = dp(14).toFloat()
-
-        val dockRow = LinearLayout(this).apply {
+        // 1. Featured Hero Card (2-Column Responsive Row)
+        val heroBg = createFrostedCardDrawable(16f)
+        val heroCard = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(26), dp(22), dp(26), dp(22))
+            background = heroBg
             clipChildren = false
             clipToPadding = false
         }
 
-        dockApps.forEachIndexed { slot, ri ->
-            val dominant = getOrComputeColor(ri)
-            val tile = createTile(
-                ri = ri,
-                secId = "fav",
-                cardW = dockCardW,
-                cardH = dockCardH,
-                cardR = dockCardR,
-                dominantColor = dominant,
-                isDock = true,
-                dockSlot = slot,
-                byPkg = byPkg
-            )
-            val lp = LinearLayout.LayoutParams(dockCardW, -2).apply {
-                if (slot < dockApps.size - 1) rightMargin = dockGap
-            }
-            dockRow.addView(tile, lp)
-        }
-
-        val dockLp = FrameLayout.LayoutParams(-2, -2).apply {
-            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-            bottomMargin = dp(56)
-        }
-        viewFavourites.addView(dockRow, dockLp)
-
-        // Initial hero text matches first dock app
-        dockApps.firstOrNull()?.let { updateHero(it) }
-
-        // 2. REBUILD ALL APPS VIEW (Categorized / 5-Column Grid)
-        allAppsContent.removeAllViews()
-
-        val allAppsList = (dockApps + otherApps).distinctBy { it.activityInfo.packageName }
-
-        // Title Header with Count Badge
-        val headLayout = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, 0, 0, dp(14))
-        }
-        val headText = TextView(this).apply {
-            text = "All applications"
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
-            setTextColor(COLOR_SOFT_WHITE)
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        }
-        val countBadge = TextView(this).apply {
-            text = "${allAppsList.size} apps"
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            setTextColor(COLOR_COOL_GRAY)
-            setPadding(dp(12), 0, 0, 0)
-        }
-        headLayout.addView(headText)
-        headLayout.addView(countBadge)
-
-        allAppsContent.addView(headLayout, LinearLayout.LayoutParams(contentW, -2))
-
-        val gridGap = dp(14)
-        val gridCardW = (contentW - (APPS_PER_ROW - 1) * gridGap) / APPS_PER_ROW
-        val gridCardH = (gridCardW * 10 / 16)
-        val gridCardR = dp(11).toFloat()
-
-        val rows = allAppsList.chunked(APPS_PER_ROW)
-
-        rows.forEachIndexed { rowIndex, rowApps ->
-            val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_HORIZONTAL
-                clipChildren = false
-                clipToPadding = false
-                setPadding(0, dp(6), 0, dp(14))
-            }
-            rowApps.forEachIndexed { colIndex, ri ->
-                val dominant = getOrComputeColor(ri)
-                val tile = createTile(
-                    ri = ri,
-                    secId = "grid_$rowIndex",
-                    cardW = gridCardW,
-                    cardH = gridCardH,
-                    cardR = gridCardR,
-                    dominantColor = dominant,
-                    isDock = false,
-                    dockSlot = -1,
-                    byPkg = byPkg
-                )
-                val lp = LinearLayout.LayoutParams(gridCardW, -2).apply {
-                    if (colIndex < rowApps.size - 1) rightMargin = gridGap
-                }
-                row.addView(tile, lp)
-            }
-            allAppsContent.addView(row, LinearLayout.LayoutParams(contentW, -2))
-        }
-    }
-
-    private fun updateHero(ri: ResolveInfo) {
-        val name = ri.loadLabel(packageManager).toString()
-        val pkg = ri.activityInfo.packageName
-        val cat = when {
-            pkg.contains("youtube") || pkg.contains("netflix") || pkg.contains("prime") ||
-                pkg.contains("disney") || pkg.contains("kodi") || pkg.contains("plex") || pkg.contains("player") -> "Streaming & Video"
-            pkg.contains("spotify") || pkg.contains("music") || pkg.contains("audio") || pkg.contains("podcast") -> "Music & Audio"
-            pkg.contains("game") || pkg.contains("arcade") || pkg.contains("dan") -> "Games & Entertainment"
-            pkg.contains("browser") || pkg.contains("brave") || pkg.contains("chrome") -> "Web Browser"
-            else -> "Installed Application"
-        }
-
-        heroTitle.animate().alpha(0f).setDuration(ms(80)).withEndAction {
-            heroTitle.text = name
-            heroSubtitle.text = "$cat • Quick Launch"
-            heroTitle.animate().alpha(1f).setDuration(ms(140)).start()
-        }.start()
-    }
-
-    // ───────────────────────── Redesigned Control Center Settings (Image 3) ─────────────────────────
-
-    private fun rebuildSettingsView() {
-        viewSettings.removeAllViews()
-        val dm = resources.displayMetrics
-        val screenW = dm.widthPixels
-        val contentW = (screenW * 0.78f).toInt()
-
-        val settingsContainer = LinearLayout(this).apply {
+        // Left Side: Text details and Action Pills
+        val heroLeft = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(0, dp(16), 0, dp(48))
+            clipChildren = false
+            clipToPadding = false
         }
-
-        // Section header
-        val headerTv = TextView(this).apply {
-            text = "Quick settings"
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
-            setTextColor(COLOR_SOFT_WHITE)
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            setPadding(0, 0, 0, dp(14))
-        }
-        settingsContainer.addView(headerTv, LinearLayout.LayoutParams(contentW, -2))
-
-        val tileGap = dp(14)
-        val tileW = (contentW - tileGap) / 2
-        val tileH = dp(76)
-
-        // 6 Distinct, Meaningful Control Center Tiles with Rich Metadata
-        val quickSettings = listOf(
-            ControlTile("Network & Wi-Fi", "Wi-Fi, Ethernet & speed", GlyphView.TYPE_WIFI) {
-                openSettings(Settings.ACTION_WIFI_SETTINGS)
-            },
-            ControlTile("Remotes & Bluetooth", "Pair controllers, remotes & audio", GlyphView.TYPE_BLUETOOTH) {
-                openSettings(Settings.ACTION_BLUETOOTH_SETTINGS)
-            },
-            ControlTile("Wallpaper & Themes", "5 atmospheric themes & custom photo", GlyphView.TYPE_WALLPAPER) {
-                customize()
-            },
-            ControlTile("Applications", "Manage installed apps & clear cache", GlyphView.TYPE_APPS) {
-                openSettings(Settings.ACTION_MANAGE_APPLICATIONS_SETTINGS)
-            },
-            ControlTile("Display & Sounds", "Resolution, HDR & volume", GlyphView.TYPE_DISPLAY) {
-                openSettings(Settings.ACTION_DISPLAY_SETTINGS)
-            },
-            ControlTile("Device & About", "Storage, system info & updates", GlyphView.TYPE_INFO) {
-                openSettings(Settings.ACTION_DEVICE_INFO_SETTINGS)
-            }
-        )
-
-        val rows = quickSettings.chunked(2)
-        rows.forEach { rowTiles ->
-            val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                setPadding(0, 0, 0, tileGap)
-            }
-            rowTiles.forEachIndexed { i, item ->
-                val tile = createQuickSettingTile(item.title, item.subtitle, item.glyphType, tileW, tileH, item.action)
-                val lp = LinearLayout.LayoutParams(tileW, tileH).apply {
-                    if (i == 0) rightMargin = tileGap
-                }
-                row.addView(tile, lp)
-            }
-            settingsContainer.addView(row, LinearLayout.LayoutParams(contentW, -2))
-        }
-
-        // Full-width "All Settings" Gateway
-        val allSettingsCard = createAllSettingsTile(contentW, dp(64)) {
-            openSettings(Settings.ACTION_SETTINGS)
-        }
-        settingsContainer.addView(allSettingsCard, LinearLayout.LayoutParams(contentW, -2).apply {
-            topMargin = dp(6)
-        })
-
-        val scroll = CalmVScroll(this).apply {
-            isVerticalScrollBarEnabled = false
-            addView(settingsContainer)
-        }
-        viewSettings.addView(scroll, FrameLayout.LayoutParams(-1, -1))
-    }
-
-    private class ControlTile(val title: String, val subtitle: String, val glyphType: Int, val action: () -> Unit)
-
-    private fun createQuickSettingTile(
-        title: String,
-        subtitle: String,
-        glyphType: Int,
-        w: Int,
-        h: Int,
-        action: () -> Unit
-    ): View {
-        val r = dp(12).toFloat()
-        val bg = GradientDrawable().apply {
-            cornerRadius = r
-            setColor(0x801B222D.toInt()) // Frosted smoky charcoal surface
-            setStroke(dp(1), 0x1AFFFFFF) // Fine translucent border
-        }
-        val badgeBg = GradientDrawable().apply {
-            shape = GradientDrawable.OVAL
-            setColor(0x22FFFFFF)
-        }
-        val iconBadge = FrameLayout(this).apply {
-            background = badgeBg
-        }
-        val glyph = GlyphView(this, glyphType)
-        iconBadge.addView(glyph, FrameLayout.LayoutParams(dp(22), dp(22), Gravity.CENTER))
-
-        val titleTv = TextView(this).apply {
-            text = title
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f)
-            setTextColor(COLOR_SOFT_WHITE)
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        }
-        val subTv = TextView(this).apply {
-            text = subtitle
+        val overline = TextView(this).apply {
+            text = "FEATURED"
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
-            setTextColor(COLOR_COOL_GRAY)
-            setPadding(0, dp(1), 0, 0)
+            setTextColor(COLOR_FOCUS_RING)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            letterSpacing = 0.12f
         }
-        val textLayout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            addView(titleTv)
-            addView(subTv)
+        val title = TextView(this).apply {
+            text = "The Last Horizon"
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 28f)
+            setTextColor(COLOR_TEXT_PRIMARY)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            setPadding(0, dp(4), 0, dp(4))
+        }
+        val desc = TextView(this).apply {
+            text = "Expedition crew reaches the outer boundary of interstellar space in search of earth's genesis."
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            setTextColor(COLOR_TEXT_SECONDARY)
+            maxLines = 2
         }
 
-        return LinearLayout(this).apply {
+        // Action Buttons Row (Resume & Details)
+        val btnRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(16), dp(10), dp(16), dp(10))
-            background = bg
+            setPadding(0, dp(14), 0, 0)
+        }
+
+        // Resume Pill Button
+        val resumeBg = GradientDrawable().apply {
+            cornerRadius = dp(20).toFloat()
+            setColor(COLOR_TEXT_PRIMARY)
+        }
+        val resumeBtn = TextView(this).apply {
+            text = "Resume"
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            setTextColor(COLOR_PILL_ACTIVE_TEXT)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            setPadding(dp(22), dp(8), dp(22), dp(8))
             isFocusable = true
             isClickable = true
-            addView(iconBadge, LinearLayout.LayoutParams(dp(40), dp(40)).apply { rightMargin = dp(14) })
-            addView(textLayout, LinearLayout.LayoutParams(0, -2, 1f))
+            background = resumeBg
 
             setOnFocusChangeListener { v, f ->
-                bg.setColor(if (f) COLOR_SOFT_WHITE else 0x801B222D.toInt())
-                bg.setStroke(dp(1), if (f) COLOR_SOFT_WHITE else 0x1AFFFFFF)
-                badgeBg.setColor(if (f) 0x1C000000 else 0x22FFFFFF)
-                titleTv.setTextColor(if (f) COLOR_TEXT_DARK else COLOR_SOFT_WHITE)
-                subTv.setTextColor(if (f) 0xFF4E5866.toInt() else COLOR_COOL_GRAY)
-                glyph.dark = f
-                glyph.invalidate()
-                v.animate().scaleX(if (f) 1.03f else 1f).scaleY(if (f) 1.03f else 1f)
-                    .setInterpolator(decel).setDuration(ms(180)).start()
-                if (f) transitionAmbient(COLOR_MUTED_BLUE)
+                if (f) {
+                    resumeBg.setStroke(dp(2), COLOR_FOCUS_RING)
+                    if (!reduceMotion) v.animate().scaleX(1.06f).scaleY(1.06f).setDuration(ms(150)).start()
+                } else {
+                    resumeBg.setStroke(0, Color.TRANSPARENT)
+                    if (!reduceMotion) v.animate().scaleX(1f).scaleY(1f).setDuration(ms(150)).start()
+                }
             }
-            setOnClickListener { action() }
+            setOnClickListener {
+                Toast.makeText(this@MainActivity, "Resuming The Last Horizon", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        // Details Glass Pill Button
+        val detailsBg = GradientDrawable().apply {
+            cornerRadius = dp(20).toFloat()
+            setColor(0x18FFFFFF)
+            setStroke(dp(1), GLASS_BORDER_TOP)
+        }
+        val detailsBtn = TextView(this).apply {
+            text = "Details"
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            setTextColor(COLOR_TEXT_PRIMARY)
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            setPadding(dp(22), dp(8), dp(22), dp(8))
+            isFocusable = true
+            isClickable = true
+            background = detailsBg
+
+            setOnFocusChangeListener { v, f ->
+                if (f) {
+                    detailsBg.setStroke(dp(1.8f), COLOR_FOCUS_RING)
+                    detailsBg.setColor(0x28FFFFFF)
+                    if (!reduceMotion) v.animate().scaleX(1.06f).scaleY(1.06f).setDuration(ms(150)).start()
+                } else {
+                    detailsBg.setStroke(dp(1), GLASS_BORDER_TOP)
+                    detailsBg.setColor(0x18FFFFFF)
+                    if (!reduceMotion) v.animate().scaleX(1f).scaleY(1f).setDuration(ms(150)).start()
+                }
+            }
+            setOnClickListener {
+                Toast.makeText(this@MainActivity, "Expedition details & info", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        btnRow.addView(resumeBtn)
+        btnRow.addView(detailsBtn, LinearLayout.LayoutParams(-2, -2).apply { leftMargin = dp(12) })
+
+        heroLeft.addView(overline)
+        heroLeft.addView(title)
+        heroLeft.addView(desc)
+        heroLeft.addView(btnRow)
+
+        // Right Side: Canvas Mountain Silhouette
+        val mountainView = MountainGraphicView(this)
+
+        heroCard.addView(heroLeft, LinearLayout.LayoutParams(0, -2, 0.60f))
+        heroCard.addView(mountainView, LinearLayout.LayoutParams(0, dp(150), 0.40f).apply { leftMargin = dp(24) })
+
+        homeContent.addView(heroCard, LinearLayout.LayoutParams(-1, -2))
+
+        // 2. Continue Watching Row
+        val continueHeader = TextView(this).apply {
+            text = "CONTINUE WATCHING"
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+            setTextColor(COLOR_TEXT_SECONDARY)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            letterSpacing = 0.12f
+            setPadding(0, dp(26), 0, dp(10))
+        }
+        homeContent.addView(continueHeader)
+
+        val continueScroll = CalmHScroll(this).apply {
+            clipChildren = false
+            clipToPadding = false
+        }
+        val continueRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            clipChildren = false
+            clipToPadding = false
+        }
+
+        val items = listOf(
+            MediaItem("Interstellar Odyssey", "42 min left", 0.65f),
+            MediaItem("Wilderness Chronicles", "18 min left", 0.30f),
+            MediaItem("Cyber Metropolis", "55 min left", 0.15f),
+            MediaItem("Deep Ocean Mysteries", "12 min left", 0.82f)
+        )
+
+        items.forEachIndexed { i, media ->
+            val cardBg = createFrostedCardDrawable(14f)
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(16), dp(14), dp(16), dp(14))
+                background = cardBg
+                isFocusable = true
+                isClickable = true
+                clipChildren = false
+                clipToPadding = false
+
+                setOnFocusChangeListener { v, f ->
+                    applyFrostedFocus(v, cardBg, f, 1.04f)
+                }
+                setOnClickListener {
+                    Toast.makeText(this@MainActivity, "Playing ${media.title}", Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            val mediaTitle = TextView(this).apply {
+                text = media.title
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f)
+                setTextColor(COLOR_TEXT_PRIMARY)
+                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                maxLines = 1
+            }
+            val remaining = TextView(this).apply {
+                text = media.remaining
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                setTextColor(COLOR_TEXT_SECONDARY)
+                setPadding(0, dp(2), 0, dp(12))
+            }
+            val progress = FlatProgressView(this).apply {
+                this.progress = media.progress
+            }
+
+            card.addView(mediaTitle)
+            card.addView(remaining)
+            card.addView(progress, LinearLayout.LayoutParams(-1, dp(4)))
+
+            val lp = LinearLayout.LayoutParams(dp(220), -2).apply {
+                if (i > 0) leftMargin = dp(14)
+            }
+            continueRow.addView(card, lp)
+        }
+
+        continueScroll.addView(continueRow)
+        homeContent.addView(continueScroll, LinearLayout.LayoutParams(-1, -2))
+
+        // 3. Your Favourites Row (Pinned quick-launch apps)
+        val favHeader = TextView(this).apply {
+            text = "FAVOURITES"
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+            setTextColor(COLOR_TEXT_SECONDARY)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            letterSpacing = 0.12f
+            setPadding(0, dp(26), 0, dp(10))
+        }
+        homeContent.addView(favHeader)
+
+        val favScroll = CalmHScroll(this).apply {
+            clipChildren = false
+            clipToPadding = false
+        }
+        val favRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            clipChildren = false
+            clipToPadding = false
+            id = View.generateViewId()
+        }
+        favScroll.addView(favRow)
+        homeContent.addView(favScroll, LinearLayout.LayoutParams(-1, -2))
+    }
+
+    private fun updateFavouritesRow() {
+        val favRow = homeContent.findViewById<LinearLayout>(homeContent.childCount - 1)
+        // Find the CalmHScroll inner row
+        val scroll = homeContent.getChildAt(homeContent.childCount - 1) as? CalmHScroll ?: return
+        val row = scroll.getChildAt(0) as? LinearLayout ?: return
+        row.removeAllViews()
+
+        val favs = allApps.take(6)
+        favs.forEachIndexed { i, app ->
+            val cardBg = createFrostedCardDrawable(14f)
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(14), dp(10), dp(16), dp(10))
+                background = cardBg
+                isFocusable = true
+                isClickable = true
+                clipChildren = false
+                clipToPadding = false
+
+                setOnFocusChangeListener { v, f ->
+                    applyFrostedFocus(v, cardBg, f, 1.05f)
+                }
+                setOnClickListener { launchApp(app) }
+            }
+
+            val iconImg = ImageView(this).apply {
+                val bmp = iconCache.get(app.iconKey)
+                if (bmp != null) setImageBitmap(bmp)
+            }
+            val label = TextView(this).apply {
+                text = app.label
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                setTextColor(COLOR_TEXT_PRIMARY)
+                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                maxLines = 1
+                setPadding(dp(12), 0, 0, 0)
+            }
+
+            card.addView(iconImg, LinearLayout.LayoutParams(dp(36), dp(36)))
+            card.addView(label, LinearLayout.LayoutParams(-2, -2))
+
+            val lp = LinearLayout.LayoutParams(dp(180), -2).apply {
+                if (i > 0) leftMargin = dp(14)
+            }
+            row.addView(card, lp)
         }
     }
 
-    private fun createAllSettingsTile(w: Int, h: Int, action: () -> Unit): View {
-        val r = dp(12).toFloat()
-        val bg = GradientDrawable().apply {
-            cornerRadius = r
-            setColor(0x801B222D.toInt())
-            setStroke(dp(1), 0x1AFFFFFF)
-        }
-        val glyph = GlyphView(this, GlyphView.TYPE_SLIDERS)
-        val titleTv = TextView(this).apply {
-            text = "All Settings"
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-            setTextColor(COLOR_SOFT_WHITE)
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        }
-        val subTv = TextView(this).apply {
-            text = "Complete Android system preferences, accounts, accessibility & privacy"
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
-            setTextColor(COLOR_COOL_GRAY)
-        }
-        val textLayout = LinearLayout(this).apply {
+    // ─────────────────────────────────────────────────────────────────────────
+    // Screen 2: Apps Tab (2-Pane Split)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private fun buildAppsScreen() {
+        viewApps.removeAllViews()
+
+        // 28% Left Sidebar: Search & Categories
+        val leftSidebar = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            addView(titleTv)
-            addView(subTv)
-        }
-        val chevron = TextView(this).apply {
-            text = "›"
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
-            setTextColor(COLOR_COOL_GRAY)
-            gravity = Gravity.CENTER
+            setPadding(0, 0, dp(24), 0)
         }
 
+        val overline = TextView(this).apply {
+            text = "YOUR APPS"
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+            setTextColor(COLOR_TEXT_SECONDARY)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            letterSpacing = 0.12f
+        }
+        val header = TextView(this).apply {
+            text = "Installed"
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 24f)
+            setTextColor(COLOR_TEXT_PRIMARY)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            setPadding(0, dp(2), 0, dp(14))
+        }
+        leftSidebar.addView(overline)
+        leftSidebar.addView(header)
+
+        // Rounded Search Bar
+        val searchBg = GradientDrawable().apply {
+            cornerRadius = dp(20).toFloat()
+            setColor(0x14FFFFFF)
+            setStroke(dp(1), 0x24FFFFFF)
+        }
+        val searchBox = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(14), dp(4), dp(14), dp(4))
+            background = searchBg
+        }
+        val searchIcon = GlyphView(this, GlyphView.TYPE_SEARCH)
+        val searchInput = EditText(this).apply {
+            hint = "Search apps…"
+            setHintTextColor(COLOR_TEXT_SECONDARY)
+            setTextColor(COLOR_TEXT_PRIMARY)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            setBackgroundColor(Color.TRANSPARENT)
+            inputType = InputType.TYPE_CLASS_TEXT
+            maxLines = 1
+
+            addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                    searchQuery = s?.toString()?.trim() ?: ""
+                    filterAndRefreshAppsGrid()
+                }
+                override fun afterTextChanged(s: Editable?) {}
+            })
+        }
+        searchBox.addView(searchIcon, LinearLayout.LayoutParams(dp(18), dp(18)))
+        searchBox.addView(searchInput, LinearLayout.LayoutParams(-1, -2).apply { leftMargin = dp(8) })
+        leftSidebar.addView(searchBox, LinearLayout.LayoutParams(-1, -2))
+
+        // Category Filter List
+        val catList = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(14), 0, 0)
+        }
+
+        categoryPills.clear()
+        categoryBadgeViews.clear()
+
+        AppCategory.values().forEach { cat ->
+            val pillBg = GradientDrawable().apply {
+                cornerRadius = dp(12).toFloat()
+                setColor(if (selectedCategory == cat) 0x26FFFFFF else Color.TRANSPARENT)
+            }
+            val pill = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(14), dp(10), dp(14), dp(10))
+                background = pillBg
+                isFocusable = true
+                isClickable = true
+
+                setOnFocusChangeListener { v, f ->
+                    if (f) {
+                        pillBg.setStroke(dp(1.8f), COLOR_FOCUS_RING)
+                        if (!reduceMotion) v.animate().scaleX(1.02f).scaleY(1.02f).setDuration(ms(150)).start()
+                    } else {
+                        pillBg.setStroke(0, Color.TRANSPARENT)
+                        if (!reduceMotion) v.animate().scaleX(1f).scaleY(1f).setDuration(ms(150)).start()
+                    }
+                }
+                setOnClickListener {
+                    selectedCategory = cat
+                    updateCategorySelection()
+                    filterAndRefreshAppsGrid()
+                }
+            }
+
+            val titleTv = TextView(this).apply {
+                text = cat.title
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                setTextColor(if (selectedCategory == cat) COLOR_TEXT_PRIMARY else COLOR_TEXT_SECONDARY)
+                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            }
+
+            val badgeBg = GradientDrawable().apply {
+                cornerRadius = dp(8).toFloat()
+                setColor(0x14FFFFFF)
+            }
+            val badgeTv = TextView(this).apply {
+                text = "0"
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                setTextColor(COLOR_TEXT_SECONDARY)
+                setPadding(dp(8), dp(2), dp(8), dp(2))
+                background = badgeBg
+            }
+
+            pill.addView(titleTv, LinearLayout.LayoutParams(0, -2, 1f))
+            pill.addView(badgeTv)
+
+            categoryPills[cat] = pill
+            categoryBadgeViews[cat] = badgeTv
+            catList.addView(pill, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(4) })
+        }
+        leftSidebar.addView(catList)
+
+        viewApps.addView(leftSidebar, LinearLayout.LayoutParams(0, -1, 0.28f))
+
+        // 72% Right Grid (Scrollable vertical grid of adaptive cards)
+        appsGridContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            clipChildren = false
+            clipToPadding = false
+        }
+        val gridScroll = CalmVScroll(this).apply {
+            addView(appsGridContainer, FrameLayout.LayoutParams(-1, -2))
+        }
+        viewApps.addView(gridScroll, LinearLayout.LayoutParams(0, -1, 0.72f))
+    }
+
+    private fun updateCategorySelection() {
+        categoryPills.forEach { (cat, pill) ->
+            val isSel = cat == selectedCategory
+            (pill.background as? GradientDrawable)?.setColor(if (isSel) 0x26FFFFFF else Color.TRANSPARENT)
+            val titleTv = (pill as LinearLayout).getChildAt(0) as? TextView
+            titleTv?.setTextColor(if (isSel) COLOR_TEXT_PRIMARY else COLOR_TEXT_SECONDARY)
+        }
+    }
+
+    private fun updateCategoryBadges() {
+        categoryBadgeViews.forEach { (cat, tv) ->
+            val count = if (cat == AppCategory.ALL) allApps.size else allApps.count { it.category == cat }
+            tv.text = count.toString()
+        }
+    }
+
+    private fun filterAndRefreshAppsGrid() {
+        filteredApps = allApps.filter { app ->
+            val matchCat = selectedCategory == AppCategory.ALL || app.category == selectedCategory
+            val matchQuery = searchQuery.isEmpty() || app.label.contains(searchQuery, ignoreCase = true)
+            matchCat && matchQuery
+        }
+
+        appsGridContainer.removeAllViews()
+        val columns = 4
+        val chunked = filteredApps.chunked(columns)
+
+        chunked.forEachIndexed { rowIndex, rowApps ->
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                clipChildren = false
+                clipToPadding = false
+                setPadding(0, if (rowIndex == 0) 0 else dp(14), 0, 0)
+            }
+
+            rowApps.forEachIndexed { colIndex, app ->
+                val cardBg = createFrostedCardDrawable(14f)
+                val card = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    gravity = Gravity.CENTER
+                    setPadding(dp(16), dp(16), dp(16), dp(16))
+                    background = cardBg
+                    isFocusable = true
+                    isClickable = true
+                    clipChildren = false
+                    clipToPadding = false
+
+                    setOnFocusChangeListener { v, f ->
+                        applyFrostedFocus(v, cardBg, f, 1.05f)
+                    }
+                    setOnClickListener { launchApp(app) }
+                }
+
+                val iconImg = ImageView(this).apply {
+                    val bmp = iconCache.get(app.iconKey)
+                    if (bmp != null) setImageBitmap(bmp)
+                }
+                val labelTv = TextView(this).apply {
+                    text = app.label
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
+                    setTextColor(COLOR_TEXT_PRIMARY)
+                    typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                    gravity = Gravity.CENTER
+                    maxLines = 1
+                    setPadding(0, dp(10), 0, 0)
+                }
+
+                card.addView(iconImg, LinearLayout.LayoutParams(dp(54), dp(54)))
+                card.addView(labelTv, LinearLayout.LayoutParams(-1, -2))
+
+                val lp = LinearLayout.LayoutParams(0, -2, 1f).apply {
+                    if (colIndex > 0) leftMargin = dp(14)
+                }
+                row.addView(card, lp)
+            }
+
+            // Pad remainder of row if incomplete
+            val remainder = columns - rowApps.size
+            for (i in 0 until remainder) {
+                val dummy = View(this)
+                val lp = LinearLayout.LayoutParams(0, 0, 1f).apply {
+                    leftMargin = dp(14)
+                }
+                row.addView(dummy, lp)
+            }
+
+            appsGridContainer.addView(row)
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Screen 3: Settings Tab (2-Pane Split)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private fun buildSettingsScreen() {
+        viewSettings.removeAllViews()
+
+        // 30% Left Sidebar
+        val leftSidebar = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 0, dp(24), 0)
+        }
+
+        val overline = TextView(this).apply {
+            text = "PREFERENCES"
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+            setTextColor(COLOR_TEXT_SECONDARY)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            letterSpacing = 0.12f
+        }
+        val header = TextView(this).apply {
+            text = "Settings"
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 24f)
+            setTextColor(COLOR_TEXT_PRIMARY)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            setPadding(0, dp(2), 0, dp(14))
+        }
+        leftSidebar.addView(overline)
+        leftSidebar.addView(header)
+
+        val categories = listOf(
+            "Display" to GlyphView.TYPE_DISPLAY,
+            "Navigation" to GlyphView.TYPE_NAVIGATION,
+            "Home screen" to GlyphView.TYPE_HOME,
+            "Privacy" to GlyphView.TYPE_PRIVACY,
+            "System" to GlyphView.TYPE_SYSTEM
+        )
+
+        categories.forEach { (catName, glyphType) ->
+            val isSel = catName == selectedSettingCat
+            val pillBg = GradientDrawable().apply {
+                cornerRadius = dp(12).toFloat()
+                setColor(if (isSel) 0x26FFFFFF else Color.TRANSPARENT)
+            }
+            val pill = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(14), dp(12), dp(14), dp(12))
+                background = pillBg
+                isFocusable = true
+                isClickable = true
+
+                setOnFocusChangeListener { v, f ->
+                    if (f) {
+                        pillBg.setStroke(dp(1.8f), COLOR_FOCUS_RING)
+                        if (!reduceMotion) v.animate().scaleX(1.02f).scaleY(1.02f).setDuration(ms(150)).start()
+                    } else {
+                        pillBg.setStroke(0, Color.TRANSPARENT)
+                        if (!reduceMotion) v.animate().scaleX(1f).scaleY(1f).setDuration(ms(150)).start()
+                    }
+                }
+                setOnClickListener {
+                    selectedSettingCat = catName
+                    buildSettingsScreen()
+                }
+            }
+
+            val glyph = GlyphView(this, glyphType)
+            val titleTv = TextView(this).apply {
+                text = catName
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f)
+                setTextColor(if (isSel) COLOR_TEXT_PRIMARY else COLOR_TEXT_SECONDARY)
+                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                setPadding(dp(12), 0, 0, 0)
+            }
+
+            pill.addView(glyph, LinearLayout.LayoutParams(dp(20), dp(20)))
+            pill.addView(titleTv, LinearLayout.LayoutParams(-1, -2))
+            leftSidebar.addView(pill, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(4) })
+        }
+        viewSettings.addView(leftSidebar, LinearLayout.LayoutParams(0, -1, 0.30f))
+
+        // 70% Right Panel: Glass Container with Setting Rows
+        val rightPanel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+
+        val cardBg = createFrostedCardDrawable(16f)
+        settingsRowsContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(18), dp(22), dp(18))
+            background = cardBg
+        }
+
+        // Setting 1: Appearance Theme
+        settingsRowsContainer.addView(createSettingRow(
+            title = "Appearance Theme",
+            subtitle = "Toggle OLED Black or Frosted Slate background",
+            valueText = appearanceTheme
+        ) {
+            appearanceTheme = if (appearanceTheme == "OLED Black") "Frosted Slate" else "OLED Black"
+            prefs.edit().putString("appearance_theme", appearanceTheme).apply()
+            applyRootBackground()
+            buildSettingsScreen()
+        })
+
+        settingsRowsContainer.addView(createDivider())
+
+        // Setting 2: Screensaver Timeout
+        settingsRowsContainer.addView(createSettingRow(
+            title = "Screensaver Timeout",
+            subtitle = "Inactivity period before blanking display",
+            valueText = screensaverTimeout
+        ) {
+            screensaverTimeout = when (screensaverTimeout) {
+                "5 minutes" -> "15 minutes"
+                "15 minutes" -> "Never"
+                else -> "5 minutes"
+            }
+            prefs.edit().putString("screensaver_timeout", screensaverTimeout).apply()
+            buildSettingsScreen()
+        })
+
+        settingsRowsContainer.addView(createDivider())
+
+        // Setting 3: Reduce Motion (Switch)
+        settingsRowsContainer.addView(createToggleRow(
+            title = "Reduce Motion",
+            subtitle = "Disables scale animations for low-end chipsets",
+            initialChecked = reduceMotion
+        ) { isChecked ->
+            reduceMotion = isChecked
+            prefs.edit().putBoolean("reduce_motion", reduceMotion).apply()
+        })
+
+        settingsRowsContainer.addView(createDivider())
+
+        // Setting 4: System Brightness Action
+        settingsRowsContainer.addView(createActionRow(
+            title = "System Brightness",
+            subtitle = "Opens Android system display preferences",
+            valueText = "Open System"
+        ) {
+            try {
+                startActivity(Intent(Settings.ACTION_DISPLAY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            } catch (e: Exception) {
+                Toast.makeText(this@MainActivity, "Display settings not available", Toast.LENGTH_SHORT).show()
+            }
+        })
+
+        settingsRowsContainer.addView(createDivider())
+
+        // Setting 5: HDR Mode (Switch)
+        settingsRowsContainer.addView(createToggleRow(
+            title = "HDR Video Output",
+            subtitle = "Allow HDR10 / Dolby Vision output formats",
+            initialChecked = hdrEnabled
+        ) { isChecked ->
+            hdrEnabled = isChecked
+            prefs.edit().putBoolean("hdr_enabled", hdrEnabled).apply()
+        })
+
+        rightPanel.addView(settingsRowsContainer, LinearLayout.LayoutParams(-1, -2))
+
+        val footerNote = TextView(this).apply {
+            text = "These settings are local to this device and do not affect your Android system settings."
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+            setTextColor(COLOR_TEXT_MUTED)
+            setPadding(dp(8), dp(12), 0, 0)
+        }
+        rightPanel.addView(footerNote)
+
+        viewSettings.addView(rightPanel, LinearLayout.LayoutParams(0, -1, 0.70f))
+    }
+
+    private fun createDivider(): View {
+        return View(this).apply {
+            setBackgroundColor(0x14FFFFFF)
+            layoutParams = LinearLayout.LayoutParams(-1, dp(1)).apply {
+                topMargin = dp(10)
+                bottomMargin = dp(10)
+            }
+        }
+    }
+
+    private fun createSettingRow(title: String, subtitle: String, valueText: String, onClick: () -> Unit): View {
         return LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(20), dp(14), dp(22), dp(14))
-            background = bg
+            setPadding(dp(4), dp(4), dp(4), dp(4))
             isFocusable = true
             isClickable = true
-            addView(glyph, LinearLayout.LayoutParams(dp(22), dp(22)).apply { rightMargin = dp(16) })
+
+            val textLayout = LinearLayout(this@MainActivity).apply {
+                orientation = LinearLayout.VERTICAL
+            }
+            val tTv = TextView(this@MainActivity).apply {
+                text = title
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                setTextColor(COLOR_TEXT_PRIMARY)
+                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            }
+            val sTv = TextView(this@MainActivity).apply {
+                text = subtitle
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+                setTextColor(COLOR_TEXT_SECONDARY)
+                setPadding(0, dp(1), 0, 0)
+            }
+            textLayout.addView(tTv)
+            textLayout.addView(sTv)
+
+            val vTv = TextView(this@MainActivity).apply {
+                text = valueText
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                setTextColor(COLOR_FOCUS_RING)
+                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            }
+            val chevron = TextView(this@MainActivity).apply {
+                text = "›"
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+                setTextColor(COLOR_TEXT_SECONDARY)
+                setPadding(dp(6), 0, 0, 0)
+            }
+
             addView(textLayout, LinearLayout.LayoutParams(0, -2, 1f))
+            addView(vTv)
             addView(chevron)
 
             setOnFocusChangeListener { v, f ->
-                bg.setColor(if (f) COLOR_SOFT_WHITE else 0x801B222D.toInt())
-                bg.setStroke(dp(1), if (f) COLOR_SOFT_WHITE else 0x1AFFFFFF)
-                titleTv.setTextColor(if (f) COLOR_TEXT_DARK else COLOR_SOFT_WHITE)
-                subTv.setTextColor(if (f) 0xFF4E5866.toInt() else COLOR_COOL_GRAY)
-                chevron.setTextColor(if (f) COLOR_TEXT_DARK else COLOR_COOL_GRAY)
-                glyph.dark = f
-                glyph.invalidate()
-                v.animate().scaleX(if (f) 1.025f else 1f).scaleY(if (f) 1.025f else 1f)
-                    .setInterpolator(decel).setDuration(ms(180)).start()
-                if (f) transitionAmbient(COLOR_MUTED_BLUE)
+                if (f) {
+                    v.setBackgroundColor(0x18FFFFFF)
+                    if (!reduceMotion) v.animate().scaleX(1.015f).scaleY(1.015f).setDuration(ms(150)).start()
+                } else {
+                    v.setBackgroundColor(Color.TRANSPARENT)
+                    if (!reduceMotion) v.animate().scaleX(1f).scaleY(1f).setDuration(ms(150)).start()
+                }
             }
-            setOnClickListener { action() }
+            setOnClickListener { onClick() }
         }
     }
 
-    // ───────────────────────── Tile Creation & Focused Physics ─────────────────────────
+    private fun createActionRow(title: String, subtitle: String, valueText: String, onClick: () -> Unit): View {
+        return createSettingRow(title, subtitle, valueText, onClick)
+    }
 
-    private fun createTile(
-        ri: ResolveInfo,
-        secId: String,
-        cardW: Int,
-        cardH: Int,
-        cardR: Float,
-        dominantColor: Int,
-        isDock: Boolean,
-        dockSlot: Int,
-        byPkg: Map<String, ResolveInfo>
-    ): View {
-        val pkg = ri.activityInfo.packageName
-        val cls = ri.activityInfo.name
-        val name = ri.loadLabel(packageManager).toString()
-        val artKey = pkg + "|" + cardW + "|" + cardH
-
-        val border = GradientDrawable().apply {
-            cornerRadius = cardR
-            setColor(Color.TRANSPARENT)
-            setStroke(0, Color.TRANSPARENT)
-        }
-
-        val img = ImageView(this).apply {
-            scaleType = ImageView.ScaleType.FIT_XY
-            background = GradientDrawable().apply {
-                setColor(blendColor(dominantColor, COLOR_MIDNIGHT_BLACK, 0.70f))
-                cornerRadius = cardR
-            }
-            foreground = border
-            tag = artKey
-            outlineProvider = object : ViewOutlineProvider() {
-                override fun getOutline(v: View, o: Outline) { o.setRoundRect(0, 0, v.width, v.height, cardR) }
-            }
-        }
-        loadArt(img, artKey) { appArt(ri, cardW, cardH, cardR, dominantColor) }
-
-        val label = TextView(this).apply {
-            text = name
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, if (isDock) 12.5f else 11.5f)
-            setTextColor(COLOR_COOL_GRAY)
-            gravity = Gravity.CENTER
-            maxLines = 1
-            ellipsize = android.text.TextUtils.TruncateAt.END
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            setPadding(0, dp(6), 0, 0)
-        }
-
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            clipChildren = false
-            clipToPadding = false
+    private fun createToggleRow(title: String, subtitle: String, initialChecked: Boolean, onToggle: (Boolean) -> Unit): View {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(4), dp(4), dp(4), dp(4))
             isFocusable = true
             isClickable = true
-            addView(img, LinearLayout.LayoutParams(cardW, cardH))
-            addView(label, LinearLayout.LayoutParams(cardW, -2))
+        }
 
-            // Focused state: Restrained 1.05x elevation, crisp soft-white focus ring, 180ms transition
-            setOnFocusChangeListener { v, f ->
-                val s = if (f) (if (isDock) 1.05f else 1.04f) else 1.0f
-                val shadowZ = if (f) dp(12).toFloat() else 0f
-                border.setStroke(dp(1.8f), if (f) COLOR_SOFT_WHITE else Color.TRANSPARENT)
-                label.setTextColor(if (f) COLOR_SOFT_WHITE else COLOR_COOL_GRAY)
+        val textLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        val tTv = TextView(this).apply {
+            text = title
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            setTextColor(COLOR_TEXT_PRIMARY)
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        }
+        val sTv = TextView(this).apply {
+            text = subtitle
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+            setTextColor(COLOR_TEXT_SECONDARY)
+            setPadding(0, dp(1), 0, 0)
+        }
+        textLayout.addView(tTv)
+        textLayout.addView(sTv)
 
-                img.animate()
-                    .scaleX(s)
-                    .scaleY(s)
-                    .translationZ(shadowZ)
-                    .setInterpolator(decel)
-                    .setDuration(ms(180))
-                    .withLayer()
-                    .start()
+        val switchView = GlassSwitchView(this).apply {
+            this.isChecked = initialChecked
+        }
 
-                if (f) {
-                    if (isDock) updateHero(ri)
-                    transitionAmbient(dominantColor)
-                }
-            }
-            setOnClickListener { launch(pkg, cls) }
-            setOnLongClickListener {
-                openTileMenu(pkg, name, isDock, dockSlot, byPkg)
-                true
+        row.addView(textLayout, LinearLayout.LayoutParams(0, -2, 1f))
+        row.addView(switchView, LinearLayout.LayoutParams(dp(38), dp(22)))
+
+        row.setOnFocusChangeListener { v, f ->
+            if (f) {
+                v.setBackgroundColor(0x18FFFFFF)
+                if (!reduceMotion) v.animate().scaleX(1.015f).scaleY(1.015f).setDuration(ms(150)).start()
+            } else {
+                v.setBackgroundColor(Color.TRANSPARENT)
+                if (!reduceMotion) v.animate().scaleX(1f).scaleY(1f).setDuration(ms(150)).start()
             }
         }
+        row.setOnClickListener {
+            switchView.isChecked = !switchView.isChecked
+            onToggle(switchView.isChecked)
+        }
+
+        return row
     }
 
-    private fun loadArt(img: ImageView, artKey: String, make: () -> Bitmap) {
-        val hit = cache.get(artKey)
-        if (hit != null) { img.background = null; img.setImageBitmap(hit); return }
+    // ─────────────────────────────────────────────────────────────────────────
+    // Real Package Manager & App Loading (Dispatchers / Worker Thread)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private fun loadInstalledApps() {
         worker.execute {
-            var bmp: Bitmap? = cache.get(artKey)
-            if (bmp == null) {
-                bmp = try { make() } catch (e: Throwable) { null }
-                if (bmp != null) cache.put(artKey, bmp)
-            }
-            val done = bmp
-            if (done != null) ui.post {
-                if (img.tag == artKey) {
-                    img.background = null
-                    img.alpha = 0f
-                    img.setImageBitmap(done)
-                    img.animate().alpha(1f).setDuration(ms(160)).start()
+            val pm = packageManager
+            val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+            val leanbackIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
+
+            val resolved = (pm.queryIntentActivities(launcherIntent, 0) +
+                            pm.queryIntentActivities(leanbackIntent, 0))
+                .filter { it.activityInfo.packageName != packageName }
+                .distinctBy { it.activityInfo.packageName }
+
+            val models = resolved.map { resolveInfo ->
+                val pkg = resolveInfo.activityInfo.packageName
+                val act = resolveInfo.activityInfo.name
+                val label = resolveInfo.loadLabel(pm).toString()
+                val iconKey = "$pkg/$act"
+
+                // Decode and cache downsampled 128x128 icon
+                if (iconCache.get(iconKey) == null) {
+                    val iconDrawable = resolveInfo.loadIcon(pm)
+                    val bmp = downsampleIcon(iconDrawable, 128, 128)
+                    iconCache.put(iconKey, bmp)
                 }
+
+                val category = mapCategory(resolveInfo.activityInfo.applicationInfo, pkg)
+                AppModel(pkg, act, label, category, iconKey)
+            }.sortedBy { it.label.lowercase() }
+
+            ui.post {
+                allApps = models
+                updateCategoryBadges()
+                filterAndRefreshAppsGrid()
+                updateFavouritesRow()
             }
         }
     }
 
-    private fun extractDominantColor(bmp: Bitmap): Int {
-        val w = bmp.width
-        val h = bmp.height
-        val stepX = maxOf(1, w / 16)
-        val stepY = maxOf(1, h / 16)
-        var maxScore = -1f
-        var bestColor = COLOR_MUTED_BLUE
-        val hsv = FloatArray(3)
+    private fun mapCategory(appInfo: ApplicationInfo, pkg: String): AppCategory {
+        val p = pkg.lowercase()
+        return when {
+            p.contains("youtube") || p.contains("netflix") || p.contains("prime") ||
+            p.contains("disney") || p.contains("kodi") || p.contains("plex") || p.contains("video") ||
+            (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && appInfo.category == ApplicationInfo.CATEGORY_VIDEO) -> AppCategory.STREAMING
 
-        for (y in 0 until h step stepY) {
-            for (x in 0 until w step stepX) {
-                val pixel = bmp.getPixel(x, y)
-                val alpha = (pixel ushr 24) and 0xFF
-                if (alpha < 100) continue
+            p.contains("spotify") || p.contains("music") || p.contains("audio") || p.contains("podcast") ||
+            (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && appInfo.category == ApplicationInfo.CATEGORY_AUDIO) -> AppCategory.MUSIC
 
-                Color.colorToHSV(pixel, hsv)
-                val sat = hsv[1]
-                val val_ = hsv[2]
+            p.contains("game") || p.contains("arcade") || p.contains("play") ||
+            (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && appInfo.category == ApplicationInfo.CATEGORY_GAME) -> AppCategory.GAMES
 
-                if (sat > 0.22f && val_ > 0.22f && val_ < 0.95f) {
-                    val score = sat * (1f - Math.abs(val_ - 0.6f))
-                    if (score > maxScore) {
-                        maxScore = score
-                        bestColor = pixel
-                    }
-                }
-            }
-        }
-        return bestColor
-    }
-
-    private fun getOrComputeColor(ri: ResolveInfo): Int {
-        val pkg = ri.activityInfo.packageName
-        colorMap[pkg]?.let { return it }
-        val pm = packageManager
-        val icon = ri.loadIcon(pm)
-        val s = 64
-        val bmp = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
-        val c = Canvas(bmp)
-        icon.setBounds(0, 0, s, s)
-        icon.draw(c)
-        val color = extractDominantColor(bmp)
-        bmp.recycle()
-        colorMap[pkg] = color
-        return color
-    }
-
-    private fun blendColor(c1: Int, c2: Int, ratio: Float): Int {
-        val ir = 1f - ratio
-        val a = (Color.alpha(c1) * ir + Color.alpha(c2) * ratio).toInt()
-        val r = (Color.red(c1) * ir + Color.red(c2) * ratio).toInt()
-        val g = (Color.green(c1) * ir + Color.green(c2) * ratio).toInt()
-        val b = (Color.blue(c1) * ir + Color.blue(c2) * ratio).toInt()
-        return Color.argb(a, r, g, b)
-    }
-
-    private fun appArt(ri: ResolveInfo, w: Int, h: Int, r: Float, dominantColor: Int): Bitmap {
-        val pm = packageManager
-        val src = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-        val c = Canvas(src)
-        val banner = ri.activityInfo.loadBanner(pm)
-        if (banner != null) {
-            c.drawColor(COLOR_MIDNIGHT_BLACK)
-            banner.setBounds(0, 0, w, h)
-            banner.draw(c)
-        } else {
-            // Rich multi-stop gradient background tinted with the brand color
-            val topColor = blendColor(dominantColor, 0xFF2A374C.toInt(), 0.35f)
-            val midColor = blendColor(dominantColor, 0xFF141C2A.toInt(), 0.65f)
-            val bottomColor = blendColor(dominantColor, COLOR_MIDNIGHT_BLACK, 0.88f)
-
-            val p = Paint().apply {
-                shader = LinearGradient(0f, 0f, 0f, h.toFloat(), intArrayOf(topColor, midColor, bottomColor), floatArrayOf(0f, 0.55f, 1f), Shader.TileMode.CLAMP)
-            }
-            c.drawRect(0f, 0f, w.toFloat(), h.toFloat(), p)
-
-            // Top specular glass sheen
-            val sheen = Paint().apply {
-                shader = LinearGradient(0f, 0f, 0f, h * 0.42f, 0x22FFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP)
-            }
-            c.drawRect(0f, 0f, w.toFloat(), h * 0.42f, sheen)
-
-            // Subtle inner rim stroke
-            val rim = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                style = Paint.Style.STROKE
-                strokeWidth = 1.2f
-                color = 0x1EFFFFFF
-            }
-            c.drawRoundRect(RectF(1f, 1f, w - 1f, h - 1f), r, r, rim)
-
-            // Centered app icon with prominent 58% height presence
-            val icon = ri.loadIcon(pm)
-            val iconSize = (h * 0.58f).toInt()
-            val left = (w - iconSize) / 2
-            val top = (h - iconSize) / 2
-            icon.setBounds(left, top, left + iconSize, top + iconSize)
-            icon.draw(c)
-        }
-        return rounded(src, r)
-    }
-
-    private fun rounded(src: Bitmap, r: Float): Bitmap {
-        val out = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
-        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            shader = BitmapShader(src, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
-        }
-        Canvas(out).drawRoundRect(RectF(0f, 0f, src.width.toFloat(), src.height.toFloat()), r, r, p)
-        src.recycle()
-        return out
-    }
-
-    private fun transitionAmbient(color: Int) {
-        if (reduce || targetAmbient == color) return
-        targetAmbient = color
-        ambientAnim?.cancel()
-        val from = if (currentAmbient == Color.TRANSPARENT) 0x00000000 else currentAmbient
-        ambientAnim = ValueAnimator.ofObject(ArgbEvaluator(), from, color).apply {
-            duration = ms(200) // 180–220ms restrained transition
-            interpolator = decel
-            addUpdateListener { va ->
-                currentAmbient = va.animatedValue as Int
-                ambientGlow.ambientColor = currentAmbient
-            }
-            start()
+            else -> AppCategory.UTILITIES
         }
     }
 
-    // ───────────────────────── Tile Context Menu & Actions ─────────────────────────
-
-    private fun launch(pkg: String, cls: String) {
-        val rec = list("rec").toMutableList()
-        rec.remove(pkg); rec.add(0, pkg)
-        save("rec", rec.take(12))
-        try {
-            startActivity(Intent(Intent.ACTION_MAIN).setComponent(ComponentName(pkg, cls))
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED))
-        } catch (e: Exception) {
-            Toast.makeText(this, "Can't open this app", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun openTileMenu(
-        pkg: String,
-        name: String,
-        isDock: Boolean,
-        dockSlot: Int,
-        byPkg: Map<String, ResolveInfo>
-    ) {
-        val all = loadApps()
-        val currentDock = getDockPackages(all).toMutableList()
-        val labels = ArrayList<String>()
-        val actions = ArrayList<() -> Unit>()
-
-        fun opt(t: String, a: () -> Unit) { labels.add(t); actions.add(a) }
-
-        if (isDock) {
-            if (dockSlot > 0) {
-                opt("Move Left") {
-                    Collections.swap(currentDock, dockSlot, dockSlot - 1)
-                    save("fav", currentDock)
-                    rebuildAppViews()
-                }
-            }
-            if (dockSlot < currentDock.size - 1) {
-                opt("Move Right") {
-                    Collections.swap(currentDock, dockSlot, dockSlot + 1)
-                    save("fav", currentDock)
-                    rebuildAppViews()
-                }
-            }
-            opt("Remove from Favourites") {
-                currentDock.remove(pkg)
-                save("fav", currentDock)
-                rebuildAppViews()
-            }
-        } else {
-            opt("Pin to Favourites") {
-                val slotOptions = (0 until DOCK_SLOT_COUNT).map { slot ->
-                    val occupantPkg = currentDock.getOrNull(slot)
-                    val occupantName = if (occupantPkg != null) {
-                        byPkg[occupantPkg]?.loadLabel(packageManager)?.toString() ?: occupantPkg
-                    } else "Empty"
-                    "Slot ${slot + 1} ($occupantName)"
-                }.toTypedArray()
-
-                AlertDialog.Builder(this)
-                    .setTitle("Select Dock Slot")
-                    .setItems(slotOptions) { _, chosenSlot ->
-                        if (chosenSlot < currentDock.size) {
-                            currentDock[chosenSlot] = pkg
-                        } else {
-                            currentDock.add(pkg)
-                        }
-                        save("fav", currentDock.take(DOCK_SLOT_COUNT))
-                        rebuildAppViews()
-                    }
-                    .show()
-            }
-        }
-
-        opt("Hide from launcher") {
-            val hid = prefs.getStringSet("hidden", emptySet<String>())!!.toMutableSet()
-            hid.add(pkg)
-            prefs.edit().putStringSet("hidden", hid).apply()
-            currentDock.remove(pkg)
-            save("fav", currentDock)
-            rebuildAppViews()
-        }
-
-        opt("App info / Uninstall") {
-            startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$pkg"))
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        }
-
-        AlertDialog.Builder(this).setTitle(name)
-            .setItems(labels.toTypedArray()) { _, which -> actions[which]() }
-            .show()
-    }
-
-    private fun customize() {
-        val anim = "Animations: " + (if (reduce) "Off" else "On") + " (select to switch)"
-        val names = presets.map { it.first } + listOf("Custom photo", "Unhide all apps", anim)
-        AlertDialog.Builder(this).setTitle("Wallpaper & Style")
-            .setItems(names.toTypedArray()) { _, i ->
-                when {
-                    i < presets.size -> { prefs.edit().putInt("wp", i).apply(); applyWallpaper() }
-                    i == presets.size -> {
-                        if (customFile() != null) { prefs.edit().putInt("wp", i).apply(); applyWallpaper() }
-                        else Toast.makeText(this,
-                            "Push photo via ADB:\nadb push photo.jpg /sdcard/Android/data/$packageName/files/wallpaper.jpg",
-                            Toast.LENGTH_LONG).show()
-                    }
-                    i == presets.size + 1 -> { prefs.edit().remove("hidden").apply(); rebuildAppViews() }
-                    else -> { reduce = !reduce; prefs.edit().putBoolean("reduce", reduce).apply() }
-                }
-            }.show()
-    }
-
-    private fun openSettings(action: String) {
-        try {
-            startActivity(Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        } catch (e: Exception) {
-            try {
-                startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            } catch (e2: Exception) {
-                Toast.makeText(this, "Settings not available", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    // ───────────────────────── Full-Screen Wallpaper ─────────────────────────
-
-    private fun customFile(): File? {
-        val dir = getExternalFilesDir(null) ?: return null
-        return listOf("wallpaper.jpg", "wallpaper.jpeg", "wallpaper.png")
-            .map { File(dir, it) }.firstOrNull { it.exists() }
-    }
-
-    private fun gradientBitmap(c: IntArray): Bitmap {
-        val w = 640
-        val h = 360
+    private fun downsampleIcon(drawable: Drawable, w: Int, h: Int): Bitmap {
         val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-        val cv = Canvas(bmp)
-        val p = Paint(Paint.DITHER_FLAG)
-        p.shader = LinearGradient(0f, 0f, w.toFloat(), h.toFloat(), c, floatArrayOf(0f, 0.55f, 1f), Shader.TileMode.CLAMP)
-        cv.drawRect(0f, 0f, w.toFloat(), h.toFloat(), p)
+        val canvas = Canvas(bmp)
+        drawable.setBounds(0, 0, w, h)
+        drawable.draw(canvas)
         return bmp
     }
 
-    private fun decodeWallpaper(f: File): Bitmap? {
+    private fun launchApp(app: AppModel) {
         try {
-            if (f.length() > MAX_WALLPAPER_BYTES) return null
-            val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            BitmapFactory.decodeFile(f.path, o)
-            val longest = maxOf(o.outWidth, o.outHeight)
-            if (o.outWidth <= 0 || o.outHeight <= 0 || longest > 20000) return null
-            var s = 1
-            while (longest / (s * 2) >= 1920) s *= 2
-            return BitmapFactory.decodeFile(f.path, BitmapFactory.Options().apply {
-                inSampleSize = s; inPreferredConfig = Bitmap.Config.RGB_565; inMutable = true
-            })
-        } catch (e: Throwable) {
-            return null
-        }
-    }
-
-    private fun applyWallpaper() {
-        val i = prefs.getInt("wp", 0)
-        wallpaper.scaleType = ImageView.ScaleType.FIT_XY
-        wallpaper.setImageBitmap(gradientBitmap(presets[i.coerceIn(0, presets.size - 1)].second))
-        if (i == presets.size) {
-            val f = customFile() ?: return
-            worker.execute {
-                val bmp = decodeWallpaper(f)
-                ui.post {
-                    if (bmp != null) {
-                        wallpaper.scaleType = ImageView.ScaleType.CENTER_CROP
-                        wallpaper.setImageBitmap(bmp)
-                    }
-                }
+            val intent = Intent(Intent.ACTION_MAIN).apply {
+                component = ComponentName(app.packageName, app.activityName)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
             }
-        }
-    }
-
-    private fun refreshWifi() {
-        try {
-            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-            val caps = cm.activeNetwork?.let { cm.getNetworkCapabilities(it) }
-            var level = 3
-            var label = "Offline"
-            when {
-                caps == null -> {
-                    level = 0
-                    label = "Offline"
-                }
-                caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> {
-                    val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-                    @Suppress("DEPRECATION")
-                    val rssi = wm.connectionInfo.rssi
-                    @Suppress("DEPRECATION")
-                    level = WifiManager.calculateSignalLevel(rssi, 4).coerceIn(1, 3)
-                    @Suppress("DEPRECATION")
-                    val rawSsid = wm.connectionInfo.ssid?.replace("\"", "") ?: ""
-                    label = if (rawSsid.isNotEmpty() && rawSsid != "<unknown ssid>") rawSsid else "Wi-Fi"
-                }
-                caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> {
-                    level = 3
-                    label = "Ethernet"
-                }
-            }
-            val st = "$level|$label"
-            if (st != wifiState) {
-                wifiState = st
-                wifiSsid = label
-                wifiIcon.level = level
-                wifiText.text = label
-                wifiIcon.invalidate()
-            }
-        } catch (e: Exception) { /* ignore */ }
-    }
-}
-
-/** Minimal line Wi-Fi glyph (consistent stroke weight). */
-internal class WifiView(c: Context) : View(c) {
-    var level = 3
-    var dark = false
-    private val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        strokeCap = Paint.Cap.ROUND
-    }
-
-    override fun onDraw(cv: Canvas) {
-        val h = height.toFloat()
-        val cx = width / 2f
-        val cy = h * 0.95f
-        p.color = if (dark) 0xFF111418.toInt() else COLOR_SOFT_WHITE
-        p.style = Paint.Style.STROKE
-        p.strokeWidth = h * 0.12f
-        for (i in 1..3) {
-            p.alpha = if (i <= level) 255 else 60
-            val r = h * 0.31f * i
-            cv.drawArc(RectF(cx - r, cy - r, cx + r, cy + r), 225f, 90f, false, p)
-        }
-        p.style = Paint.Style.FILL
-        p.alpha = if (level > 0) 255 else 60
-        cv.drawCircle(cx, cy, h * 0.08f, p)
-    }
-}
-
-/** Clean line vector glyphs for Quick Settings tiles. */
-internal class GlyphView(c: Context, private val type: Int) : View(c) {
-    companion object {
-        const val TYPE_WIFI = 1
-        const val TYPE_BLUETOOTH = 2
-        const val TYPE_WALLPAPER = 3
-        const val TYPE_DISPLAY = 4
-        const val TYPE_APPS = 5
-        const val TYPE_INFO = 6
-        const val TYPE_SLIDERS = 7
-    }
-
-    var dark = false
-    private val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        strokeCap = Paint.Cap.ROUND
-        strokeJoin = Paint.Join.ROUND
-    }
-
-    override fun onDraw(cv: Canvas) {
-        val w = width.toFloat()
-        val h = height.toFloat()
-        val color = if (dark) 0xFF111418.toInt() else COLOR_SOFT_WHITE
-        p.color = color
-        p.style = Paint.Style.STROKE
-        p.strokeWidth = w * 0.09f
-
-        when (type) {
-            TYPE_WIFI -> {
-                val cx = w * 0.5f
-                val cy = h * 0.90f
-                for (i in 1..3) {
-                    val r = h * 0.28f * i
-                    cv.drawArc(RectF(cx - r, cy - r, cx + r, cy + r), 225f, 90f, false, p)
-                }
-                p.style = Paint.Style.FILL
-                cv.drawCircle(cx, cy, h * 0.08f, p)
-            }
-            TYPE_BLUETOOTH -> {
-                val cx = w * 0.5f
-                cv.drawLine(cx, h * 0.12f, cx, h * 0.88f, p)
-                val path = Path().apply {
-                    moveTo(w * 0.28f, h * 0.35f)
-                    lineTo(w * 0.72f, h * 0.65f)
-                    lineTo(cx, h * 0.88f)
-                    lineTo(w * 0.72f, h * 0.35f)
-                    lineTo(w * 0.28f, h * 0.65f)
-                }
-                cv.drawPath(path, p)
-            }
-            TYPE_WALLPAPER -> {
-                cv.drawRoundRect(RectF(w * 0.1f, h * 0.12f, w * 0.9f, h * 0.88f), w * 0.12f, w * 0.12f, p)
-                p.style = Paint.Style.FILL
-                cv.drawCircle(w * 0.32f, h * 0.38f, w * 0.10f, p)
-                p.style = Paint.Style.STROKE
-                val path = Path().apply {
-                    moveTo(w * 0.18f, h * 0.76f)
-                    lineTo(w * 0.44f, h * 0.52f)
-                    lineTo(w * 0.62f, h * 0.68f)
-                    lineTo(w * 0.74f, h * 0.58f)
-                    lineTo(w * 0.84f, h * 0.76f)
-                }
-                cv.drawPath(path, p)
-            }
-            TYPE_DISPLAY -> {
-                cv.drawCircle(w * 0.5f, h * 0.5f, w * 0.22f, p)
-                for (angle in 0 until 360 step 45) {
-                    val rad = Math.toRadians(angle.toDouble())
-                    val x1 = (w * 0.5f + Math.cos(rad) * w * 0.32f).toFloat()
-                    val y1 = (h * 0.5f + Math.sin(rad) * h * 0.32f).toFloat()
-                    val x2 = (w * 0.5f + Math.cos(rad) * w * 0.44f).toFloat()
-                    val y2 = (h * 0.5f + Math.sin(rad) * h * 0.44f).toFloat()
-                    cv.drawLine(x1, y1, x2, y2, p)
-                }
-            }
-            TYPE_APPS -> {
-                val s = w * 0.28f
-                cv.drawRoundRect(RectF(w * 0.15f, h * 0.15f, w * 0.15f + s, h * 0.15f + s), w * 0.06f, w * 0.06f, p)
-                cv.drawRoundRect(RectF(w * 0.55f, h * 0.15f, w * 0.55f + s, h * 0.15f + s), w * 0.06f, w * 0.06f, p)
-                cv.drawRoundRect(RectF(w * 0.15f, h * 0.55f, w * 0.15f + s, h * 0.55f + s), w * 0.06f, w * 0.06f, p)
-                cv.drawRoundRect(RectF(w * 0.55f, h * 0.55f, w * 0.55f + s, h * 0.55f + s), w * 0.06f, w * 0.06f, p)
-            }
-            TYPE_INFO -> {
-                cv.drawCircle(w * 0.5f, h * 0.5f, w * 0.38f, p)
-                p.style = Paint.Style.FILL
-                cv.drawCircle(w * 0.5f, h * 0.34f, w * 0.06f, p)
-                p.style = Paint.Style.STROKE
-                cv.drawLine(w * 0.5f, h * 0.46f, w * 0.5f, h * 0.68f, p)
-            }
-            TYPE_SLIDERS -> {
-                cv.drawLine(w * 0.12f, h * 0.32f, w * 0.88f, h * 0.32f, p)
-                cv.drawLine(w * 0.12f, h * 0.68f, w * 0.88f, h * 0.68f, p)
-                p.style = Paint.Style.FILL
-                cv.drawCircle(w * 0.35f, h * 0.32f, w * 0.11f, p)
-                cv.drawCircle(w * 0.65f, h * 0.68f, w * 0.11f, p)
-            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Unable to launch ${app.label}", Toast.LENGTH_SHORT).show()
         }
     }
 }
