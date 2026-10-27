@@ -1,5 +1,8 @@
 # Changelog
 
+## 6.0.0 - 2026-10-27
+- Automated major release bump from 5.0.1 (versionCode 15) to 6.0.0 (versionCode 16).
+
 ## 5.2.0 - 2026-10-27
 - **Apple tvOS-Inspired Pure Cinematic Home & Functional Quick Settings**:
   - **Clean Home Screen (Zero Dummy Content)**: Removed placeholder featured hero card and dummy continue-watching rows. The Home screen now lets the atmospheric wallpaper breathe with prominent hero typography and quick action hints.
