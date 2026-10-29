@@ -124,8 +124,8 @@ fun WallpaperDisclosureRow(
         // Expanded Swatches Panel
         AnimatedVisibility(
             visible = expanded,
-            enter = expandVertically(animationSpec = Tokens.MotionSpec),
-            exit = shrinkVertically(animationSpec = Tokens.MotionSpec)
+            enter = expandVertically(animationSpec = tween(Tokens.StandardMotionDuration)),
+            exit = shrinkVertically(animationSpec = tween(Tokens.StandardMotionDuration))
         ) {
             Row(
                 modifier = Modifier

@@ -128,13 +128,13 @@ private fun CustomTvSwitch(
 ) {
     val trackBgColor by animateColorAsState(
         targetValue = if (checked) Tokens.SwitchOn else Tokens.SwitchOff,
-        animationSpec = Tokens.MotionSpec,
+        animationSpec = Tokens.MotionColorSpec,
         label = "switchTrackColor"
     )
 
     val knobOffset by animateDpAsState(
         targetValue = if (checked) 21.dp else 2.5.dp,
-        animationSpec = Tokens.MotionSpec,
+        animationSpec = Tokens.MotionDpSpec,
         label = "switchKnobOffset"
     )
 

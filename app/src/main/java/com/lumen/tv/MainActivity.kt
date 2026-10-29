@@ -27,8 +27,8 @@ import com.lumen.tv.data.*
 import com.lumen.tv.focus.FocusEngine
 import com.lumen.tv.focus.LauncherPage
 import com.lumen.tv.focus.rememberFocusEngine
-import com.lumen.tv.ui.chrome.Scrim
 import com.lumen.tv.ui.chrome.TopChrome
+import com.lumen.tv.ui.chrome.TopChromeScrim
 import com.lumen.tv.ui.chrome.WallpaperLayer
 import com.lumen.tv.ui.drawer.AppsScreen
 import com.lumen.tv.ui.home.HomeScreen
@@ -129,7 +129,7 @@ fun LumenTvLauncherApp(
 
     var allApps by remember { mutableStateOf<List<LaunchableApp>>(emptyList()) }
     var favouriteApps by remember { mutableStateOf<List<LaunchableApp>>(emptyList()) }
-    val continueItems = remember { DemoContinueRepository.getContinueItems() }
+    val continueItems = remember { DemoContinueRepository().getContinueItems() }
 
     val appsGridState = rememberLazyGridState()
 
@@ -174,8 +174,7 @@ fun LumenTvLauncherApp(
     ) {
         // Wallpaper Layer (Presets + Dim + 500ms Crossfade)
         WallpaperLayer(
-            preset = wallpaperState.preset,
-            isDimmed = wallpaperState.isDimmed
+            state = wallpaperState
         )
 
         // Page Content (300ms Crossfade)
@@ -220,10 +219,7 @@ fun LumenTvLauncherApp(
         }
 
         // Top Chrome Scrim (84dp with 14dp blur)
-        Scrim(
-            height = Tokens.ScrimHeight,
-            blurRadius = Tokens.BlurChrome
-        )
+        TopChromeScrim()
 
         // Top Chrome (64dp, Live Clock, Tabs, Wi-Fi Chip)
         TopChrome(

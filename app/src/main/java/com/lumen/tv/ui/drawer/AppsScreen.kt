@@ -121,18 +121,20 @@ private fun AppDrawerTile(
 
     val borderColor by animateColorAsState(
         targetValue = if (isFocused) Tokens.CardBorderFocused else Tokens.CardBorderHairline,
+        animationSpec = Tokens.MotionColorSpec,
         label = "drawerTileBorder"
     )
 
     val labelColor by animateColorAsState(
         targetValue = if (isFocused) Tokens.TextPrimary else Tokens.TextTertiary,
+        animationSpec = Tokens.MotionColorSpec,
         label = "drawerTileText"
     )
 
     val iconBitmap = remember(app) { favouritesStore.getIcon(app) }
 
     Column(
-        horizontalAlignment = Alignment.CenterVertically,
+        horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier
             .width(118.dp)

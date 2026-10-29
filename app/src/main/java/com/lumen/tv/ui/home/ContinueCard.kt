@@ -73,13 +73,13 @@ fun ContinueCard(
 
     val fillColor by animateColorAsState(
         targetValue = if (isFocused) Tokens.GlassFillFocused else Tokens.GlassFill,
-        animationSpec = Tokens.MotionSpec,
+        animationSpec = Tokens.MotionColorSpec,
         label = "continueFill"
     )
 
     val borderColor by animateColorAsState(
         targetValue = if (isFocused) Tokens.CardBorderFocused else Tokens.CardBorder,
-        animationSpec = Tokens.MotionSpec,
+        animationSpec = Tokens.MotionColorSpec,
         label = "continueBorder"
     )
 
