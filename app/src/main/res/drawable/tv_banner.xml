@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+    <path
+        android:pathData="M0,0h320v180h-320z"
+        android:fillColor="#050506" />
+    <!-- Gradient / Glow accent -->
+    <path
+        android:pathData="M0,0h320v180h-320z"
+        android:fillColor="#151A26" />
+    <!-- Emblem Flame icon centered -->
+    <path
+        android:pathData="M160,50 C145,75 130,95 130,115 C130,135 145,150 160,150 C175,150 190,135 190,115 C190,95 175,75 160,50 Z"
+        android:fillColor="#FF9F0A" />
+    <path
+        android:pathData="M160,80 C152,95 145,105 145,118 C145,130 152,138 160,138 C168,138 175,130 175,118 C175,105 168,95 160,80 Z"
+        android:fillColor="#FFD60A" />
+</vector>

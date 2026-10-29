@@ -1,35 +1,61 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Only two normal permissions. There is deliberately NO INTERNET permission:
-         the app cannot send data anywhere. scripts/audit.sh enforces this in CI. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Launcher permissions -->
+    <uses-permission android:name="android.permission.SET_WALLPAPER" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
-    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
-    <uses-feature android:name="android.software.leanback" android:required="false" />
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
+
+    <!-- Dual hardware profile declarations: Android TV and Tablet -->
+    <uses-feature
+        android:name="android.software.leanback"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.touchscreen"
+        android:required="false" />
+
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+        </intent>
+    </queries>
+
     <application
-        android:label="FireClear"
+        android:label="Lumen TV"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
-        android:banner="@mipmap/ic_launcher"
+        android:banner="@drawable/tv_banner"
         android:allowBackup="false"
-        android:usesCleartextTraffic="false"
-        android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen">
-        <!-- The only exported component. It reads no intent extras. -->
+        android:supportsRtl="true"
+        android:theme="@style/Theme.LumenTV">
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
             android:resumeWhilePausing="true"
-            android:stateNotNeeded="true">
+            android:stateNotNeeded="true"
+            android:windowSoftInputMode="adjustNothing"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenLayout|screenSize|smallestScreenSize|uiMode">
+
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.HOME" />
                 <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
+
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
-                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
     </application>
