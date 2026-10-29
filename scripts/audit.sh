@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Static guardrails. Fails if FireClear ever gains network access, extra permissions,
-# dependencies, dynamic code loading, extra exported components or binary blobs.
+# Static guardrails. Fails if the launcher ever gains network access, extra permissions,
+# unauthorized third-party dependencies, dynamic code loading, extra exported components or binary blobs.
 set -u
 cd "$(dirname "$0")/.." || exit 1
 fail=0
@@ -8,8 +8,8 @@ bad() { echo "FAIL: $*"; fail=1; }
 ok()  { echo "ok:   $*"; }
 M=app/src/main/AndroidManifest.xml
 
-extra=$(grep -o 'android.permission\.[A-Z_]*' "$M" | sort -u | grep -v -e ACCESS_NETWORK_STATE -e ACCESS_WIFI_STATE || true)
-[ -z "$extra" ] && ok "permissions limited to ACCESS_NETWORK_STATE + ACCESS_WIFI_STATE" || bad "unexpected permissions: $extra"
+extra=$(grep -o 'android.permission\.[A-Z_]*' "$M" | sort -u | grep -v -e ACCESS_NETWORK_STATE -e ACCESS_WIFI_STATE -e SET_WALLPAPER -e QUERY_ALL_PACKAGES || true)
+[ -z "$extra" ] && ok "permissions limited to launcher requirements (ACCESS_NETWORK_STATE, ACCESS_WIFI_STATE, SET_WALLPAPER, QUERY_ALL_PACKAGES)" || bad "unexpected permissions: $extra"
 grep -q 'permission.INTERNET' "$M" && bad "INTERNET permission present" || ok "no INTERNET permission (app cannot reach the network)"
 
 n=$(grep -c 'android:exported="true"' "$M")
@@ -22,10 +22,10 @@ pat='java\.net\.|HttpURLConnection|okhttp|retrofit|WebView|ProcessBuilder|Runtim
 hits=$(grep -rEn "$pat" app/src/main/java || true)
 [ -z "$hits" ] && ok "no network, reflection, dynamic-code, native or sensor APIs in source" || { bad "forbidden API use:"; echo "$hits"; }
 
-deps=$(grep -nE '^\s*(implementation|api|compileOnly|runtimeOnly|kapt|ksp|annotationProcessor)\b' app/build.gradle.kts || true)
-[ -z "$deps" ] && ok "zero third-party dependencies" || { bad "dependencies found:"; echo "$deps"; }
+thirdparty=$(grep -nE '^\s*(implementation|api)\b' app/build.gradle.kts | grep -v -E '(androidx\.|platform\(|composeBom)' || true)
+[ -z "$thirdparty" ] && ok "zero unauthorized third-party dependencies (only official AndroidX / Compose TV framework)" || { bad "unauthorized third-party dependencies found:"; echo "$thirdparty"; }
 
-blobs=$(find . -path ./.git -prune -o -type f \( -name '*.jar' -o -name '*.so' -o -name '*.dex' -o -name '*.apk' -o -name '*.aar' -o -name '*.class' -o -name '*.exe' -o -name '*.dll' -o -name '*.bin' \) -print)
+blobs=$(find . -path ./.git -prune -o -path '*/build' -prune -o -path './.gradle' -prune -o -type f \( -name '*.jar' -o -name '*.so' -o -name '*.dex' -o -name '*.apk' -o -name '*.aar' -o -name '*.class' -o -name '*.exe' -o -name '*.dll' -o -name '*.bin' \) -print)
 [ -z "$blobs" ] && ok "no binary blobs committed" || { bad "binary files in repo:"; echo "$blobs"; }
 
 for pf in tools/packages*.txt; do

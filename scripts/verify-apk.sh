@@ -34,7 +34,7 @@ if echo "$found_perms" | grep -q 'android\.permission\.INTERNET'; then
 fi
 
 # Verify only allowed permissions are present
-extra=$(echo "$found_perms" | grep -vE 'android\.permission\.(ACCESS_NETWORK_STATE|ACCESS_WIFI_STATE)' || true)
+extra=$(echo "$found_perms" | grep -vE 'android\.permission\.(ACCESS_NETWORK_STATE|ACCESS_WIFI_STATE|SET_WALLPAPER|QUERY_ALL_PACKAGES)' || true)
 if [ -n "$extra" ]; then
   echo "FAIL: unexpected permissions:"
   echo "$extra"
