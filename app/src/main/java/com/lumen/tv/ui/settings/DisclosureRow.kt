@@ -3,6 +3,7 @@ package com.lumen.tv.ui.settings
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
@@ -172,7 +173,7 @@ private fun WallpaperSwatch(
     val borderColor = if (isFocused || isSelected) Color.White else Tokens.CardBorderHairline
 
     Column(
-        horizontalAlignment = Alignment.CenterVertically,
+        horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Box(
