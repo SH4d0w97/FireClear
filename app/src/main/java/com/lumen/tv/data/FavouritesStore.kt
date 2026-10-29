@@ -88,10 +88,6 @@ class FavouritesStore(private val context: Context) {
         return iconCache.get("$pkg/$act")
     }
 
-    fun getIcon(app: LaunchableApp): ImageBitmap? {
-        return getCachedIcon(app.packageName, app.activityName)
-    }
-
     private fun downsample(drawable: Drawable, w: Int, h: Int): Bitmap {
         val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bmp)
@@ -100,3 +96,4 @@ class FavouritesStore(private val context: Context) {
         return bmp
     }
 }
+

@@ -87,7 +87,6 @@ fun TopChrome(
                         isActive -> Tokens.TextPrimary
                         else -> Tokens.TextTertiary
                     },
-                    animationSpec = Tokens.MotionColorSpec,
                     label = "tabTextCol"
                 )
 
@@ -154,3 +153,4 @@ fun TopChrome(
         }
     }
 }
+

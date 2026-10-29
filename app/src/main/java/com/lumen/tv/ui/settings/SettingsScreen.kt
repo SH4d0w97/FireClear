@@ -439,6 +439,7 @@ private fun RenderDeviceGroup(
         }
 
         if (matchesSound) {
+            @Suppress("DEPRECATION")
             SettingsRow(
                 label = "Sound",
                 value = "Atmos",
