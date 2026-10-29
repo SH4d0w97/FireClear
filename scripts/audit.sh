@@ -25,7 +25,7 @@ hits=$(grep -rEn "$pat" app/src/main/java || true)
 deps=$(grep -nE '^\s*(implementation|api|compileOnly|runtimeOnly|kapt|ksp|annotationProcessor)\b' app/build.gradle.kts || true)
 [ -z "$deps" ] && ok "zero third-party dependencies" || { bad "dependencies found:"; echo "$deps"; }
 
-blobs=$(find . -path ./.git -prune -o -type f \( -name '*.jar' -o -name '*.so' -o -name '*.dex' -o -name '*.apk' -o -name '*.aar' -o -name '*.class' -o -name '*.exe' -o -name '*.dll' -o -name '*.bin' \) -print)
+blobs=$(find . -path ./.git -prune -o -path '*/build' -prune -o -path './.gradle' -prune -o -type f \( -name '*.jar' -o -name '*.so' -o -name '*.dex' -o -name '*.apk' -o -name '*.aar' -o -name '*.class' -o -name '*.exe' -o -name '*.dll' -o -name '*.bin' \) -print)
 [ -z "$blobs" ] && ok "no binary blobs committed" || { bad "binary files in repo:"; echo "$blobs"; }
 
 for pf in tools/packages*.txt; do
