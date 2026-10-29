@@ -81,13 +81,13 @@ fun FavouriteTile(
 
     val borderColor by animateColorAsState(
         targetValue = if (isFocused) Tokens.TileBorderFocused else Tokens.Hairline,
-        animationSpec = Tokens.MotionSpec,
+        animationSpec = Tokens.MotionColorSpec,
         label = "favTileBorder"
     )
 
     val labelColor by animateColorAsState(
         targetValue = if (isFocused) Tokens.TextPrimary else Tokens.TextTertiary,
-        animationSpec = Tokens.MotionSpec,
+        animationSpec = Tokens.MotionColorSpec,
         label = "favTileLabelColor"
     )
 
