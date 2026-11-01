@@ -31,7 +31,7 @@ jobs:
           cd app/build/outputs/apk/debug
           cp app-debug.apk FireClear-debug.apk
           sha256sum FireClear-debug.apk | tee SHA256SUMS.txt
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: FireClear-debug-apk
           path: |
